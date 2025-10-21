@@ -9,6 +9,7 @@ class Tokenizer:
         """
         vocab = sorted(list(set(data)))
         # For now, just maps individual characters to ints
+        self.n = len(vocab)
         self.tok_to_int = {t:i for i, t in enumerate(vocab)}
         self.int_to_tok = {i:t for i, t in enumerate(vocab)}
 
