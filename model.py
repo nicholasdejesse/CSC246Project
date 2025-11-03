@@ -5,34 +5,39 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Hyperparameters (TODO: move these somewhere else (argparse)?)
-embd_dim = 32
-head_dim = 16
+embd_dim = 384
 ff_hidden_size = 2048
+mha_heads = 6
+num_blocks = 6
 
 class Head(nn.Module):
-    def __init__(self):
+    def __init__(self, is_masked, head_dim):
         super().__init__()
+        self.head_dim = head_dim
         self.w_q = nn.Linear(embd_dim, head_dim)
         self.w_k = nn.Linear(embd_dim, head_dim)
         self.w_v = nn.Linear(embd_dim, head_dim)
+        self.is_masked = is_masked
 
     def forward(self, x):
         # x is (B, T, C)
         _, T, _ = x.shape
         query, key, value = self.w_q(x), self.w_k(x), self.w_v(x) # Each (B, T, H)
         res = query @ key.transpose(1, 2) # (B, T, T)
-        res /= head_dim ** 0.5 # (B, T, T)
+        res /= self.head_dim ** 0.5 # (B, T, T)
 
         mask = torch.tril(torch.ones((T, T)))
-        res = res.masked_fill(mask == 0, float("-inf"))
+        if self.is_masked:
+            res = res.masked_fill(mask == 0, float("-inf"))
         res = F.softmax(res, dim=-1)
         res = res @ value
         return res
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, num_heads):
+    def __init__(self, num_heads, is_masked):
         super().__init__()
-        self.heads = [Head() for _ in range(num_heads)]
+        head_dim = embd_dim // num_heads
+        self.heads = [Head(is_masked=is_masked, head_dim=head_dim) for _ in range(num_heads)]
         self.lin = nn.Linear(embd_dim, embd_dim)
 
     def forward(self, x):
@@ -40,7 +45,6 @@ class MultiHeadAttention(nn.Module):
         res = torch.cat(res, dim=-1)
         res = self.lin(res)
         return res
-
 
 class FeedForward(nn.Module):
     def __init__(self):
@@ -58,21 +62,37 @@ class FeedForward(nn.Module):
 class DecoderBlock(nn.Module):
     def __init__(self):
         super().__init__()
+        self.mha = MultiHeadAttention(num_heads=mha_heads, is_masked=True)
+        self.ff = FeedForward()
+        self.ln1 = nn.LayerNorm()
+        self.ln2 = nn.LayerNorm()
 
     def forward(self, x):
-        pass
+        x += self.mha(x)
+        x = self.ln1(x)
+        x += self.ff(x)
+        x = self.ln2(x)
+        return x
 
 class Transformer(nn.Module):
-    def __init__(self, n_embd, n_blocks):
+    def __init__(self, tokenizer):
         super().__init__()
-        self.embd = nn.Embedding(num_embeddings=n_embd, embedding_dim=embd_dim)
-        self.blocks = [DecoderBlock() for _ in range(n_blocks)]
+        self.tokenizer = tokenizer
+        self.embd = nn.Embedding(num_embeddings=embd_dim, embedding_dim=embd_dim)
+        self.decoder_blocks = nn.Sequential(*(DecoderBlock() for _ in range(num_blocks))) # Pass each decoder block as an arg
+        self.lin = nn.Linear(embd_dim, self.tokenizer.n)
 
     def forward(self, x):
         x = self.embd(x) + self.pos_enc(x)
-        for b in self.blocks:
-            x = b(x)
+        x = self.decoder_blocks(x)
+        x = self.lin(x)
         return x
 
+    # TODO: Do the sin cos thing described in paper
     def pos_enc(self, x):
         return torch.arange(len(x))
+    
+    def generate(self, x):
+        x = self.tokenizer.encode(x)
+        # Need to implement this
+        return x
