@@ -120,7 +120,7 @@ class Transformer(nn.Module):
         """
         Context: string
         """
-        tok_con = self.tokenizer.encode(tok_con)
+        tok_con = self.tokenizer.encode(context)
         for _ in num_tokens:
             pass
         # Need to implement this
