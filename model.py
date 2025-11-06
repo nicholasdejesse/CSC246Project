@@ -67,8 +67,8 @@ class EncoderBlock(nn.Module):
         super().__init__()
         self.mha = MultiHeadAttention(num_heads=mha_heads, is_masked=False)
         self.ff = FeedForward()
-        self.ln1 = nn.LayerNorm()
-        self.ln2 = nn.LayerNorm()
+        self.ln1 = nn.LayerNorm(embd_dim)
+        self.ln2 = nn.LayerNorm(embd_dim)
 
     def forward(self, x):
         x += self.mha(x)
@@ -83,9 +83,9 @@ class DecoderBlock(nn.Module):
         self.masked_mha = MultiHeadAttention(num_heads=mha_heads, is_masked=True)
         self.mha = MultiHeadAttention(num_heads=mha_heads, is_masked=False)
         self.ff = FeedForward()
-        self.ln1 = nn.LayerNorm()
-        self.ln2 = nn.LayerNorm()
-        self.ln3 = nn.LayerNorm()
+        self.ln1 = nn.LayerNorm(embd_dim)
+        self.ln2 = nn.LayerNorm(embd_dim)
+        self.ln3 = nn.LayerNorm(embd_dim)
 
     def forward(self, x, enc):
         x += self.masked_mha(x)
@@ -111,6 +111,11 @@ class Transformer(nn.Module):
         x = self.decoder_blocks(x, enc_out)
         x = self.lin(x)
         return x
+
+    def train(self, train_loader, epochs):
+        for _ in range(epochs):
+            for x, y in train_loader:
+                print(f"X: {x} | Y: {y}")
 
     # TODO: Do the sin cos thing described in paper
     def pos_enc(self, x):
