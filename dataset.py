@@ -18,8 +18,8 @@ class EnglishToSpanish(Dataset):
         self.df = self.df.map(lambda x: self.__process_row(x, tokenizer, max_len, special_tokens))
 
     def __process_row(self, x, tokenizer, max_len, special_tokens):
-        tok_len = len(tokenizer.encode(x))
+        tok_len = len(tokenizer.encode(x)) + 2 # Add 2 because we add two speciall tokens below before padding
+        x = special_tokens["bos"] + x + special_tokens["eos"]
         for _ in range(max_len - tok_len):
             x += special_tokens["pad"]
-        x = special_tokens["bos"] + x + special_tokens["eos"]
         return x

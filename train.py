@@ -22,11 +22,11 @@ def main():
     print("Training tokenizer...")
     tokenizer = Tokenizer(data.df, special_tokens=special)
     print("Tokenizer training complete.")
-    print(f"Vocab: {tokenizer.vocab}")
 
     print("Processing data...")
-    data.preprocess(tokenizer, max_len=10, special_tokens=special)
+    data.preprocess(tokenizer, max_len=100, special_tokens=special)
     print("Data processing complete.")
+    print(data.df[0:1])
 
     # print(data.df[0:10])
 
@@ -36,6 +36,7 @@ def main():
     test_loader = DataLoader(test_data)
 
     model = Transformer(tokenizer)
+    # model.train(train_loader=train_loader, epochs=10)
 
 
 if __name__ == "__main__":
