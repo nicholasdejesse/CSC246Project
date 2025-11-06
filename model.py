@@ -19,10 +19,13 @@ class Head(nn.Module):
         self.w_v = nn.Linear(embd_dim, head_dim)
         self.is_masked = is_masked
 
-    def forward(self, x):
+    def forward(self, x, enc = None):
         # x is (B, T, C)
         _, T, _ = x.shape
-        query, key, value = self.w_q(x), self.w_k(x), self.w_v(x) # Each (B, T, H)
+        if self.is_masked:
+            query, key, value = self.w_q(x), self.w_k(x), self.w_v(x) # Each (B, T, H)
+        else:
+            query, key, value = self.w_q(x), self.w_k(enc), self.w_v(enc) # Each (B, T, H)
         res = query @ key.transpose(1, 2) # (B, T, T)
         res /= self.head_dim ** 0.5 # (B, T, T)
 
@@ -40,8 +43,8 @@ class MultiHeadAttention(nn.Module):
         self.heads = [Head(is_masked=is_masked, head_dim=head_dim) for _ in range(num_heads)]
         self.lin = nn.Linear(embd_dim, embd_dim)
 
-    def forward(self, x):
-        res = [h(x) for h in self.heads]
+    def forward(self, x, enc = None):
+        res = [h(x, enc) for h in self.heads]
         res = torch.cat(res, dim=-1)
         res = self.lin(res)
         return res
@@ -59,10 +62,10 @@ class FeedForward(nn.Module):
         res = self.ff_stack(x)
         return res
 
-class DecoderBlock(nn.Module):
+class EncoderBlock(nn.Module):
     def __init__(self):
         super().__init__()
-        self.mha = MultiHeadAttention(num_heads=mha_heads, is_masked=True)
+        self.mha = MultiHeadAttention(num_heads=mha_heads, is_masked=False)
         self.ff = FeedForward()
         self.ln1 = nn.LayerNorm()
         self.ln2 = nn.LayerNorm()
@@ -74,17 +77,38 @@ class DecoderBlock(nn.Module):
         x = self.ln2(x)
         return x
 
+class DecoderBlock(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.masked_mha = MultiHeadAttention(num_heads=mha_heads, is_masked=True)
+        self.mha = MultiHeadAttention(num_heads=mha_heads, is_masked=False)
+        self.ff = FeedForward()
+        self.ln1 = nn.LayerNorm()
+        self.ln2 = nn.LayerNorm()
+        self.ln3 = nn.LayerNorm()
+
+    def forward(self, x, enc):
+        x += self.masked_mha(x)
+        x = self.ln1(x)
+        x += self.mha(x, enc)
+        x = self.ln2(x)
+        x += self.ff(x)
+        x = self.ln3(x)
+        return x
+
 class Transformer(nn.Module):
     def __init__(self, tokenizer):
         super().__init__()
         self.tokenizer = tokenizer
         self.embd = nn.Embedding(num_embeddings=embd_dim, embedding_dim=embd_dim)
+        self.encoder_blocks = nn.Sequential(*(DecoderBlock() for _ in range(num_blocks))) # Pass each decoder block as an arg
         self.decoder_blocks = nn.Sequential(*(DecoderBlock() for _ in range(num_blocks))) # Pass each decoder block as an arg
         self.lin = nn.Linear(embd_dim, self.tokenizer.n)
 
     def forward(self, x):
         x = self.embd(x) + self.pos_enc(x)
-        x = self.decoder_blocks(x)
+        enc_out = self.encoder_blocks(x)
+        x = self.decoder_blocks(x, enc_out)
         x = self.lin(x)
         return x
 
@@ -92,7 +116,12 @@ class Transformer(nn.Module):
     def pos_enc(self, x):
         return torch.arange(len(x))
     
-    def generate(self, x):
-        x = self.tokenizer.encode(x)
+    def generate(self, context, num_tokens):
+        """
+        Context: string
+        """
+        tok_con = self.tokenizer.encode(tok_con)
+        for _ in num_tokens:
+            pass
         # Need to implement this
-        return x
+        return context
