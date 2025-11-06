@@ -112,6 +112,11 @@ class Transformer(nn.Module):
         x = self.lin(x)
         return x
 
+    def train(self, train_loader, epochs):
+        for _ in range(epochs):
+            for x, y in train_loader:
+                print(f"X: {x} | Y: {y}")
+
     # TODO: Do the sin cos thing described in paper
     def pos_enc(self, x):
         return torch.arange(len(x))
@@ -120,7 +125,7 @@ class Transformer(nn.Module):
         """
         Context: string
         """
-        tok_con = self.tokenizer.encode(tok_con)
+        tok_con = self.tokenizer.encode(context)
         for _ in num_tokens:
             pass
         # Need to implement this
