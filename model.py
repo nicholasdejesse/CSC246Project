@@ -10,11 +10,12 @@ from torch.nn.utils.rnn import pad_sequence
 embd_dim = 384
 ff_hidden_size = 2048
 mha_heads = 6
-num_blocks = 6
-context_size = 32
-max_enc_len = 1024
-max_dec_len = 1024
-lr = 0.0001
+num_encoder_blocks = 6
+num_decoder_blocks = 6
+max_encoder_len = 512
+max_decoder_len = 512
+eval_iters = 8
+lr = 0.0003
 
 class Head(nn.Module):
     def __init__(self, is_masked, head_dim, device):
@@ -53,7 +54,7 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, x, enc = None):
         res = [h(x, enc) for h in self.heads]
-        res = torch.cat(res, dim=-1).to(self.device)
+        res = torch.cat(res, dim=-1)
         res = self.lin(res)
         return res
 
@@ -112,11 +113,13 @@ class Transformer(nn.Module):
 
         self.tok_embd_enc = nn.Embedding(num_embeddings=tokenizer.n, embedding_dim=embd_dim)
         self.tok_embd_dec = nn.Embedding(num_embeddings=tokenizer.n, embedding_dim=embd_dim)
-        self.pos_embd_enc = nn.Embedding(num_embeddings=max_enc_len, embedding_dim=embd_dim)
-        self.pos_embd_dec = nn.Embedding(num_embeddings=max_dec_len, embedding_dim=embd_dim)
+        self.pos_embd_enc = nn.Embedding(num_embeddings=max_encoder_len, embedding_dim=embd_dim)
+        self.pos_embd_dec = nn.Embedding(num_embeddings=max_decoder_len, embedding_dim=embd_dim)
 
-        self.encoder_blocks = nn.Sequential(*(EncoderBlock(device) for _ in range(num_blocks))) # Pass each decoder block as an arg
-        self.decoder_blocks = nn.ModuleList([DecoderBlock(device) for _ in range(num_blocks)]) # Pass each decoder block as an arg
+        # Pass each encoder block as an arg
+        self.encoder_blocks = nn.Sequential(*(EncoderBlock(device) for _ in range(num_encoder_blocks)))
+        # Kept as list because sequential can't take in multiple inputs (and we need to pass in encoder logits)
+        self.decoder_blocks = nn.ModuleList([DecoderBlock(device) for _ in range(num_decoder_blocks)])
         self.lin = nn.Linear(embd_dim, self.tokenizer.n)
 
         self.optim = optim.AdamW(self.parameters(), lr=lr)
@@ -131,45 +134,77 @@ class Transformer(nn.Module):
         for d in self.decoder_blocks[1:]:
             res = d(res, enc_out)
         res = self.lin(res)
-        return res
+        return res # (B, T, C)
 
-    def train(self, train_loader, epochs):
+    def train_model(self, train_loader, test_loader, epochs):
+        self.train()
         for e in range(epochs):
-            if e % 100 == 0:
-                print(f"---Epoch {e}---")
-            in_lang, out_lang = next(iter(train_loader))
-            # Each (B, T)
-            enc_in = process_batch(in_lang, self.tokenizer, special_tokens=self.tokenizer.special_tokens)
-            out_lang_processed = process_batch(out_lang, self.tokenizer, special_tokens=self.tokenizer.special_tokens)
-
-            dec_in = out_lang_processed[:, :-1]
-            target = out_lang_processed[:, 1:]
-
-            enc_in, dec_in, target = enc_in.to(self.device), dec_in.to(self.device), target.to(self.device)
+            if e % 10 == 0:
+                train_loss, test_loss = self.estimate_loss(train_loader, test_loader)
+                print(f"---Epoch {e}, Train loss: {train_loss:.3f}, Test loss: {test_loss:.3f}---")
+            
+            enc_in, dec_in, target = get_batch(train_loader, self.tokenizer, self.device)
 
             out = self(enc_in, dec_in)
             B, T, C = out.shape
             out = out.view(B*T, C)
-            target = target.view(B*T)
+            target = target.view(-1)
             loss = F.cross_entropy(out, target)
 
-            loss.backward()
             self.optim.zero_grad()
+            loss.backward()
             self.optim.step()
 
     # TODO: Do the sin cos thing described in paper
     def pos_enc(self, length):
         return torch.arange(length).to(self.device)
     
-    def generate(self, context, num_tokens):
-        """
-        Context: string
-        """
-        tok_con = self.tokenizer.encode(context)
-        for _ in num_tokens:
-            pass
-        # Need to implement this
+    def generate(self, encoder_input):
+        encoder_input = torch.tensor(self.tokenizer.encode(encoder_input), dtype=torch.long, device=self.device).unsqueeze(0)
+        context = self.tokenizer.special_tokens["bos"]
+        for _ in range(max_decoder_len):
+            dec_in = torch.tensor(self.tokenizer.encode(context), dtype=torch.long, device=self.device).unsqueeze(0)
+            with torch.no_grad():
+                out = self(encoder_input, dec_in)
+            out = out[:, -1, :] # Extract data for last token (1, C)
+            out = torch.softmax(out, -1)
+            tok = torch.multinomial(out, num_samples=1)
+            decoded = self.tokenizer.decode(tok.flatten().tolist())
+            context += decoded
+            if decoded == self.tokenizer.special_tokens["eos"]:
+                break   
         return context
+    
+    def estimate_loss(self, train_loader, test_loader):
+        self.eval()
+        losses = []
+        for loader in [train_loader, test_loader]:
+            total_loss = 0
+            for k in range(eval_iters):
+                enc_in, dec_in, target = get_batch(loader, self.tokenizer, self.device)
+                with torch.no_grad():
+                    out = self(enc_in, dec_in)
+                B, T, C = out.shape
+                out = out.view(B*T, C)
+                target = target.view(-1)
+                total_loss += F.cross_entropy(out, target)
+            total_loss /= k
+            losses.append(total_loss)
+        self.train()
+        return losses
+
+def get_batch(loader, tokenizer, device):
+    in_lang, out_lang = next(iter(loader))
+    # Each (B, T)
+    enc_in = process_batch(in_lang, tokenizer, special_tokens=tokenizer.special_tokens)
+    out_lang_processed = process_batch(out_lang, tokenizer, special_tokens=tokenizer.special_tokens)
+
+    dec_in = out_lang_processed[:, :-1]
+    target = out_lang_processed[:, 1:]
+
+    enc_in, dec_in, target = enc_in.to(device), dec_in.to(device), target.to(device)
+
+    return enc_in, dec_in, target
 
 def process_batch(batch, tokenizer, special_tokens):
     bos = tokenizer.encode(special_tokens["bos"])

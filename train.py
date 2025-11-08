@@ -1,5 +1,7 @@
 # Script to actually train the model
 # import kagglehub
+import os
+
 import torch
 from torch.utils.data import random_split, DataLoader
 
@@ -9,7 +11,8 @@ from model import Transformer
 
 # Hyperparameters
 batch_size = 64
-epochs = 100
+epochs = 200
+save_path = "./models/model.pt"
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -36,8 +39,10 @@ def main():
 
     model = Transformer(tokenizer, device)
     model.to(device)
-    model.train(train_loader=train_loader, epochs=100)
+    model.train_model(train_loader=train_loader, test_loader=test_loader, epochs=epochs)
 
+    os.makedirs("models/", exist_ok=True)
+    torch.save(model.state_dict(), save_path)
 
 if __name__ == "__main__":
     main()
