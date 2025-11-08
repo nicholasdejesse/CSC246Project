@@ -18,6 +18,7 @@ class Tokenizer:
             self.vocab.append(t)
         # For now, just maps individual characters to ints
         self.n = len(self.vocab)
+        self.special_tokens = special_tokens
         self.tok_to_int = {t:i for i, t in enumerate(self.vocab)}
         self.int_to_tok = {i:t for i, t in enumerate(self.vocab)}
 
@@ -26,7 +27,7 @@ class Tokenizer:
         ls = []
         i = 0
         while i < len(txt):
-            if txt[i] != "[":
+            if txt[i] != "<":
                 ls.append(self.tok_to_int[txt[i]])
                 i += 1
             else:
@@ -43,9 +44,9 @@ class Tokenizer:
 if __name__ == "__main__":
     train = "Wowwy, CSC 246 is an amazing course!"
     special = {
-        "bos": "[BOS]",
-        "eos": "[EOS]",
-        "pad": "[PAD]"
+        "bos": "<BOS>",
+        "eos": "<EOS>",
+        "pad": "<PAD>"
     }
 
     tkn = Tokenizer(train, special_tokens=special)
