@@ -13,12 +13,13 @@ class Tokenizer:
             txt = "".join(data.to_numpy().flatten())
         else:
             txt = data
-        self.vocab = sorted(list(set(txt)))
-        for t in special_tokens.values():
-            self.vocab.append(t)
-        # For now, just maps individual characters to ints
-        self.n = len(self.vocab)
+
         self.special_tokens = special_tokens
+        self.vocab = sorted(list(set(txt)))
+        special_tok_sorted = [special_tokens["pad"], special_tokens["bos"], special_tokens["eos"]]
+        self.vocab = special_tok_sorted + self.vocab
+        self.n = len(self.vocab)
+        # For now, just maps individual characters to ints
         self.tok_to_int = {t:i for i, t in enumerate(self.vocab)}
         self.int_to_tok = {i:t for i, t in enumerate(self.vocab)}
 

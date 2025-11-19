@@ -4,7 +4,7 @@ from model import Transformer
 from dataset import EnglishToSpanish
 from tokenizer import Tokenizer
 
-model_load_path = "./models/model.pt"
+model_load_path = "./models/model_ignorepad2.pt"
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -17,6 +17,7 @@ def main():
         "pad": "<PAD>"
     }
 
+    # TODO: Need to load the tokenizer made during training instead of retraining it
     print("Training tokenizer...")
     tokenizer = Tokenizer(data.df, special_tokens=special)
     print("Tokenizer training complete.")
@@ -29,7 +30,7 @@ def main():
     while True:
         encoder_in = input("Enter English words:")
         out = model.generate(encoder_in)
-        print(out)
+        print(tokenizer.decode(out.squeeze().tolist()))
 
 if __name__ == "__main__":
     main()
