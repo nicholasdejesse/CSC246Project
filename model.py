@@ -170,7 +170,7 @@ class Transformer(nn.Module):
             if b % 100 == 0:
                 train_loss, test_loss = self.estimate_loss(train_loader, test_loader)
                 train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader)
-                print(f"---Epoch {b}, Train loss: {train_loss:.3f}, Test loss: {test_loss:.3f}---")
+                print(f"---Epoch {b}, Train loss: {train_loss:.3f}, Test loss: {test_loss:.3f}, Train BLEU: {train_bleu:.5f}, Test BLEU: {test_bleu:.5f}---")
                 self.loss_info["Batch"].append(b)
                 self.loss_info["Train loss"].append(train_loss)
                 self.loss_info["Test loss"].append(test_loss)
