@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 class Tokenizer:
-    def __init__(self, data, special_tokens, vocab_size):
+    def __init__(self, data, special_tokens):
         """
         Args:
             data (string): The training data used to determine the tokens.
@@ -13,6 +13,7 @@ class Tokenizer:
             self.text = "".join(data.to_numpy().flatten())
         else:
             self.text = data
+        self.special_tokens = special_tokens
 
     def train(self, vocab_size):
         tokens = self.text.encode("utf-8")
@@ -72,8 +73,9 @@ class Tokenizer:
     def save(self, path):
         data = {
             "vocab": {str(k): v.decode("utf-8", errors="replace") for k, v in self.vocab.items()},
-            "merges": {f"{k[0]},{k[1]}": v for k, v in self.merges.items()},
-            "special_tokens": self.sp_tok_to_id,
+            "merges": {f"{a},{b}": idx for (a, b), idx in self.merges.items()},
+            "special_tokens": self.special_tokens,
+            "sp_tok_to_id": self.sp_tok_to_id,
             "vocab_size": len(self.vocab)
         }
 
@@ -82,14 +84,15 @@ class Tokenizer:
 
     @staticmethod
     def load(path):
-        import json
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        tok = Tokenizer("", {}, data["vocab_size"])
+        tok = Tokenizer(data="", special_tokens=data["special_tokens"])
+
+        # Restore core structures
         tok.vocab = {int(k): v.encode("utf-8") for k, v in data["vocab"].items()}
         tok.merges = {tuple(map(int, k.split(","))): v for k, v in data["merges"].items()}
-        tok.sp_tok_to_id = data["special_tokens"]
+        tok.sp_tok_to_id = {k: int(v) for k, v in data["sp_tok_to_id"].items()}
         tok.sp_ids = set(tok.sp_tok_to_id.values())
 
         return tok
@@ -128,7 +131,8 @@ if __name__ == "__main__":
 
     }
 
-    tkn = Tokenizer(train, special_tokens=special, vocab_size=276)
+    tkn = Tokenizer(train, special_tokens=special)
+    tkn.train(vocab_size=276)
 
     test = "[BOS]Wowwy, CSC 246 is an amazing course![EOS][PAD][PAD]"
     print(f"Encoded: {tkn.encode(test)}")
