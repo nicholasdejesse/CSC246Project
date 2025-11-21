@@ -10,17 +10,19 @@ class Tokenizer:
             data (string): The training data used to determine the tokens.
         """
         if type(data) is pd.DataFrame:
-            text = "".join(data.to_numpy().flatten())
+            self.text = "".join(data.to_numpy().flatten())
         else:
-            text = data
-        tokens = text.encode("utf-8")
+            self.text = data
+
+    def train(self, vocab_size):
+        tokens = self.text.encode("utf-8")
         tokens = list(map(int, tokens))
         num_merges = vocab_size - 256
         ids = list(tokens)
 
         self.sp_tok_to_id = {}
 
-        for i, tok in enumerate(special_tokens.values()):
+        for i, tok in enumerate(self.special_tokens.values()):
             self.sp_tok_to_id[tok] = vocab_size + i
 
         self.sp_ids = set(self.sp_tok_to_id.values())
@@ -39,8 +41,6 @@ class Tokenizer:
             self.vocab[idx] = self.vocab[p0] + self.vocab[p1]
         for tok, idx in self.sp_tok_to_id.items():
             self.vocab[idx] = tok.encode("utf-8")
-
-
     def decode(self,ids):
         tokens = b"".join(self.vocab[idx] for idx in ids)
         text = tokens.decode("utf-8", errors="replace")
