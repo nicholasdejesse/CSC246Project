@@ -134,6 +134,6 @@ if __name__ == "__main__":
     tkn = Tokenizer(train, special_tokens=special)
     tkn.train(vocab_size=276)
 
-    test = "[BOS]Wowwy, CSC 246 is an amazing course![EOS][PAD][PAD]"
+    test = "[BOS]Wowy, CSC 246 is an amazing course![EOS][PAD][PAD]"
     print(f"Encoded: {tkn.encode(test)}")
     print(f"Decoded: {tkn.decode(tkn.encode(test))}")
