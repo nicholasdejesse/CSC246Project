@@ -2,7 +2,6 @@
 import numpy as np
 import pandas as pd
 
-# Currently character level, needs to be "chunks" of characters at some point
 class Tokenizer:
     def __init__(self, data, special_tokens, vocab_size):
         """
@@ -45,7 +44,7 @@ class Tokenizer:
         tokens = b"".join(self.vocab[idx] for idx in ids)
         text = tokens.decode("utf-8", errors="replace")
         return text
-    # Encoding
+
     def encode(self,text):
         tokens = []
         i = 0
