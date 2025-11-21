@@ -1,4 +1,5 @@
 # Code for tokenizer
+import json
 import numpy as np
 import pandas as pd
 
@@ -67,6 +68,17 @@ class Tokenizer:
             idx = self.merges[pair]
             tokens = bpe_merge(tokens, self.sp_ids, pair, idx)
         return tokens
+
+    def save(self, path):
+        data = {
+            "vocab": {str(k): v.decode("utf-8", errors="replace") for k, v in self.vocab.items()},
+            "merges": {f"{k[0]},{k[1]}": v for k, v in self.merges.items()},
+            "special_tokens": self.sp_tok_to_id,
+            "vocab_size": len(self.vocab)
+        }
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
 def get_stats(ids, sp_ids):
     counts = {}
