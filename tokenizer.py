@@ -80,6 +80,21 @@ class Tokenizer:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
+    @staticmethod
+    def load(path):
+        import json
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        tok = Tokenizer("", {}, data["vocab_size"])
+        tok.vocab = {int(k): v.encode("utf-8") for k, v in data["vocab"].items()}
+        tok.merges = {tuple(map(int, k.split(","))): v for k, v in data["merges"].items()}
+        tok.sp_tok_to_id = data["special_tokens"]
+        tok.sp_ids = set(tok.sp_tok_to_id.values())
+
+        return tok
+
+
 def get_stats(ids, sp_ids):
     counts = {}
 
