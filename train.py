@@ -13,9 +13,12 @@ from model import Transformer
 # Hyperparameters
 batch_size = 64
 num_batches = 200
+vocab_size = 8000
+
 model_name = "test_model"
 save_path = f"./models/{model_name}.pt"
 checkpoint_save_dir = f"./checkpoints/{model_name}/"
+tokenizer_save_dir = f"./tokenizer.json"
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -30,10 +33,17 @@ def main():
         "pad": "<PAD>"
     }
 
-    print("Training tokenizer...")
-    tokenizer = Tokenizer(data.df, special_tokens=special)
-    print("Tokenizer training complete.")
-    # print(tokenizer.vocab)
+    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=vocab_size)
+    if os.path.exists(tokenizer_save_dir):
+        try:
+            tokenizer.load(tokenizer_save_dir)
+        except:
+            raise Exception(f"Could not load tokenizer at path {tokenizer_save_dir}")
+    else:
+        print("Training tokenizer...")
+        tokenizer.train()
+        tokenizer.save(tokenizer_save_dir)
+        print("Tokenizer training complete.")
 
     train_data, test_data = random_split(data, [0.7, 0.3])
     

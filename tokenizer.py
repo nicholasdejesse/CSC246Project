@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 class Tokenizer:
-    def __init__(self, data, special_tokens):
+    def __init__(self, data, special_tokens, vocab_size):
         """
         Args:
             data (string): The training data used to determine the tokens.
@@ -14,17 +14,18 @@ class Tokenizer:
         else:
             self.text = data
         self.special_tokens = special_tokens
+        self.vocab_size = vocab_size
 
-    def train(self, vocab_size):
+    def train(self):
         tokens = self.text.encode("utf-8")
         tokens = list(map(int, tokens))
-        num_merges = vocab_size - 256
+        num_merges = self.vocab_size - 256
         ids = list(tokens)
 
         self.sp_tok_to_id = {}
 
         for i, tok in enumerate(self.special_tokens.values()):
-            self.sp_tok_to_id[tok] = vocab_size + i
+            self.sp_tok_to_id[tok] = self.vocab_size + i
 
         self.sp_ids = set(self.sp_tok_to_id.values())
         self.merges = {}
@@ -42,6 +43,7 @@ class Tokenizer:
             self.vocab[idx] = self.vocab[p0] + self.vocab[p1]
         for tok, idx in self.sp_tok_to_id.items():
             self.vocab[idx] = tok.encode("utf-8")
+            
     def decode(self,ids):
         tokens = b"".join(self.vocab[idx] for idx in ids)
         text = tokens.decode("utf-8", errors="replace")
@@ -82,14 +84,12 @@ class Tokenizer:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    @staticmethod
-    def load(path):
+    def load(self, path):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        tok = Tokenizer(data="", special_tokens=data["special_tokens"])
+        tok = Tokenizer(data="", special_tokens=data["special_tokens"], vocab_size=self.vocab_size)
 
-        # Restore core structures
         tok.vocab = {int(k): v.encode("utf-8") for k, v in data["vocab"].items()}
         tok.merges = {tuple(map(int, k.split(","))): v for k, v in data["merges"].items()}
         tok.sp_tok_to_id = {k: int(v) for k, v in data["sp_tok_to_id"].items()}

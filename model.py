@@ -25,6 +25,7 @@ dropout = 0.3
 pos_embd_mode = "sin"
 
 lr = 3e-4
+# Increase lr at start then start decreasing it after warmup_steps
 warmup_steps = 4000
 
 class Head(nn.Module):
