@@ -13,21 +13,21 @@ class Tokenizer:
             self.text = "".join(data.to_numpy().flatten())
         else:
             self.text = data
+        self.tokens = self.text.encode("utf-8")
         self.special_tokens = special_tokens
+        self.tokens = list(map(int, self.tokens))
+        self.sp_tok_to_id = {}
+        self.merges = {}
+        self.sp_ids = set(self.sp_tok_to_id.values())
+        self.vocab = {}
 
     def train(self, vocab_size):
-        tokens = self.text.encode("utf-8")
-        tokens = list(map(int, tokens))
         num_merges = vocab_size - 256
-        ids = list(tokens)
-
-        self.sp_tok_to_id = {}
+        ids = list(self.tokens)
 
         for i, tok in enumerate(self.special_tokens.values()):
             self.sp_tok_to_id[tok] = vocab_size + i
 
-        self.sp_ids = set(self.sp_tok_to_id.values())
-        self.merges = {}
         for i in range(num_merges):
             stats = get_stats(ids, self.sp_ids)
             if not stats:
