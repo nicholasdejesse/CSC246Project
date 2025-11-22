@@ -4,12 +4,12 @@ from model import Transformer
 from dataset import EnglishToSpanish
 from tokenizer import Tokenizer
 
-model_load_path = "./models/model_ignorepad2.pt"
+model_load_path = "./checkpoints/100k_batches_full_model_8k_vocab/100000/checkpoint.pt"
+tokenizer_path = "./tokenizer.json"
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # TODO: Save tokenizer so we don't have to retrain it here
     data = EnglishToSpanish("./data/data.csv")
     special = {
         "bos": "<BOS>",
@@ -17,13 +17,14 @@ def main():
         "pad": "<PAD>"
     }
 
-    # TODO: Need to load the tokenizer made during training instead of retraining it
-    print("Training tokenizer...")
     tokenizer = Tokenizer(data.df, special_tokens=special)
-    print("Tokenizer training complete.")
+    try:
+        tokenizer.load(tokenizer_path)
+    except:
+        raise Exception(f"Could not load tokenizer at path {tokenizer_path}. Are you sure you trained it?")
 
     model = Transformer(tokenizer, device)
-    model.load_state_dict(torch.load(model_load_path))
+    model.load_state_dict(torch.load(model_load_path)["model"])
     model.to(device)
 
     model.eval()

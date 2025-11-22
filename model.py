@@ -21,9 +21,12 @@ num_encoder_blocks = 6
 num_decoder_blocks = 6
 max_encoder_len = 512
 max_decoder_len = 512
-eval_iters = 4 # Can be low because each iteration evaluates an entire batch
+eval_iters = 2 # Can be low because each iteration evaluates an entire batch
 dropout = 0.3
 pos_embd_mode = "sin"
+
+save_freq = 1000
+log_freq = 1000
 
 lr = 3e-4
 # Increase lr at start then start decreasing it after warmup_steps
@@ -142,7 +145,7 @@ class Transformer(nn.Module):
         self.optim = optim.AdamW(self.parameters(), lr=1)
         self.lr_schedule = scheduler.LambdaLR(self.optim, lmda)
 
-        self.loss_info = {"Batch": [], "Train loss": [], "Test loss": [], "Train BLEU": [], "Test BLEU": []}
+        self.loss_info = {"batch": [], "train_loss": [], "test_loss": [], "train_bleu": [], "test_bleu": []}
 
 
     def forward(self, enc_in, dec_in):
@@ -159,30 +162,22 @@ class Transformer(nn.Module):
         return dec_in # (B, T, C)
 
     def train_model(self, train_loader, test_loader, num_batches, checkpoint_dir, save_intermediate_checkpoints):
-        def save_checkpoint(iter):
-            chk_dir = f"{checkpoint_dir}{iter}"
-            if os.path.isdir(chk_dir):
-                return
-            os.makedirs(chk_dir, exist_ok=True)
-            full_path = f"{chk_dir}/checkpoint.pt"
-            torch.save(self.state_dict(), full_path)
-            print(f"Checkpoint saved as {full_path}\n")
-
         self.train()
         self.dump_model_info(checkpoint_dir)
         for b in range(num_batches):
-            if b % 1000 == 0:
+            if b % save_freq == 0:
                 if save_intermediate_checkpoints:
-                    save_checkpoint(b)
-            if b % 100 == 0:
+                    self.save_checkpoint(checkpoint_dir, b+1)
+            if b % log_freq == 0:
                 train_loss, test_loss = self.estimate_loss(train_loader, test_loader)
-                train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader)
+                # train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader)
+                train_bleu, test_bleu = 0, 0
                 print(f"---Epoch {b}, Train loss: {train_loss:.3f}, Test loss: {test_loss:.3f}, Train BLEU: {train_bleu:.5f}, Test BLEU: {test_bleu:.5f}---")
-                self.loss_info["Batch"].append(b)
-                self.loss_info["Train loss"].append(train_loss)
-                self.loss_info["Test loss"].append(test_loss)
-                self.loss_info["Train BLEU"].append(train_bleu)
-                self.loss_info["Test BLEU"].append(test_bleu)
+                self.loss_info["batch"].append(b)
+                self.loss_info["train_loss"].append(train_loss.item())
+                self.loss_info["test_loss"].append(test_loss.item())
+                self.loss_info["train_bleu"].append(train_bleu)
+                self.loss_info["test_bleu"].append(test_bleu)
             
             enc_in, dec_in, target = get_batch(train_loader, self.tokenizer, self.device)
 
@@ -198,7 +193,7 @@ class Transformer(nn.Module):
             self.optim.step()
             self.lr_schedule.step()
 
-        save_checkpoint(b)
+        self.save_checkpoint(checkpoint_dir, b+1)
         pd.DataFrame(self.loss_info).to_csv(f"{checkpoint_dir}log.txt", index=False)
 
     def pos_enc(self, length):
@@ -218,6 +213,21 @@ class Transformer(nn.Module):
         else:
             raise NotImplementedError(pos_embd_mode)
     
+    def save_checkpoint(self, checkpoint_dir, iter):
+        chk_dir = f"{checkpoint_dir}{iter}"
+        if os.path.isdir(chk_dir):
+            return
+        os.makedirs(chk_dir, exist_ok=True)
+
+        checkpoint = {
+            "model": self.state_dict(),
+            "optimizer": self.optim.state_dict(),
+            "scheduler": self.lr_schedule.state_dict(),
+            "iter": iter,
+        }
+        torch.save(checkpoint, f"{chk_dir}/checkpoint.pt")
+        print(f"Checkpoint saved to {chk_dir}")
+
     def generate(self, encoder_input):
         encoder_input = torch.tensor(self.tokenizer.encode(encoder_input), dtype=torch.long, device=self.device).unsqueeze(0)
         context = torch.tensor(self.tokenizer.encode(self.tokenizer.special_tokens["bos"]), dtype=torch.long, device=self.device).unsqueeze(0)

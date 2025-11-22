@@ -12,10 +12,10 @@ from model import Transformer
 
 # Hyperparameters
 batch_size = 64
-num_batches = 10000
+num_batches = 100000
 vocab_size = 8000
 
-model_name = "10k_batches_full_model_8k_vocab"
+model_name = "100k_batches_full_model_8k_vocab"
 save_path = f"./models/{model_name}.pt"
 checkpoint_save_dir = f"./checkpoints/{model_name}/"
 tokenizer_save_dir = f"./tokenizer.json"
@@ -56,10 +56,14 @@ def main():
     # Sum all parameters
     print(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
 
-    model.train_model(train_loader=train_loader, test_loader=test_loader, num_batches=num_batches, checkpoint_dir=checkpoint_save_dir, save_intermediate_checkpoints=False)
-
-    os.makedirs("models/", exist_ok=True)
-    torch.save(model.state_dict(), save_path)
+    # Model is also saved in this function
+    model.train_model(
+        train_loader=train_loader,
+        test_loader=test_loader,
+        num_batches=num_batches,
+        checkpoint_dir=checkpoint_save_dir,
+        save_intermediate_checkpoints=False
+    )
 
 if __name__ == "__main__":
     main()
