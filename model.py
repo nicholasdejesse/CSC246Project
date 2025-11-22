@@ -199,7 +199,7 @@ class Transformer(nn.Module):
             self.lr_schedule.step()
 
         save_checkpoint(b)
-        pd.DataFrame(self.loss_info).to_csv(f"{checkpoint_dir}{num_batches}", index=False)
+        pd.DataFrame(self.loss_info).to_csv(f"{checkpoint_dir}log.txt", index=False)
 
     def pos_enc(self, length):
         if pos_embd_mode == "sin":
@@ -213,7 +213,7 @@ class Transformer(nn.Module):
             res[:,0::2] = torch.sin(ang)
             res[:,1::2] = torch.cos(ang)
             return res
-        elif pos_embd_mode == "add":
+        elif pos_embd_mode == "index":
             return torch.arange(length).to(self.device)
         else:
             raise NotImplementedError(pos_embd_mode)
@@ -288,7 +288,7 @@ class Transformer(nn.Module):
             "warmup_steps": warmup_steps,
         }
         os.makedirs(path, exist_ok=True)
-        with open(f"{path}/info.json", "w", encoding="utf-8") as f:
+        with open(f"{path}/model_info.json", "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
 
 
