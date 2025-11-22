@@ -28,9 +28,8 @@ pos_embd_mode = "sin"
 save_freq = 1000
 log_freq = 1000
 
-lr = 3e-4
 # Increase lr at start then start decreasing it after warmup_steps
-warmup_steps = 4000
+lr_warmup_steps = 4000
 
 class Head(nn.Module):
     def __init__(self, is_masked, head_dim, device):
@@ -141,7 +140,7 @@ class Transformer(nn.Module):
         self.lin = nn.Linear(d_model, self.tokenizer.vocab_size)
         self.dropout = nn.Dropout(dropout)
 
-        lmda = lambda epoch : (d_model ** -0.5) * min((epoch + 1) ** -0.5, (epoch + 1) * warmup_steps ** -1.5)
+        lmda = lambda epoch : (d_model ** -0.5) * min((epoch + 1) ** -0.5, (epoch + 1) * lr_warmup_steps ** -1.5)
         self.optim = optim.AdamW(self.parameters(), lr=1)
         self.lr_schedule = scheduler.LambdaLR(self.optim, lmda)
 
@@ -170,8 +169,7 @@ class Transformer(nn.Module):
                     self.save_checkpoint(checkpoint_dir, b+1)
             if b % log_freq == 0:
                 train_loss, test_loss = self.estimate_loss(train_loader, test_loader)
-                # train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader)
-                train_bleu, test_bleu = 0, 0
+                train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader)
                 print(f"---Epoch {b}, Train loss: {train_loss:.3f}, Test loss: {test_loss:.3f}, Train BLEU: {train_bleu:.5f}, Test BLEU: {test_bleu:.5f}---")
                 self.loss_info["batch"].append(b)
                 self.loss_info["train_loss"].append(train_loss.item())
@@ -294,8 +292,7 @@ class Transformer(nn.Module):
             "eval_iters": eval_iters,
             "dropout": dropout,
             "pos_embd_mode": pos_embd_mode,
-            "lr": lr,
-            "warmup_steps": warmup_steps,
+            "lr_warmup_steps": lr_warmup_steps,
         }
         os.makedirs(path, exist_ok=True)
         with open(f"{path}/model_info.json", "w", encoding="utf-8") as f:
