@@ -27,6 +27,9 @@ def calculate_bleu(translated, target, n=4):
         clip_count = sum([min(translated_igrams[g], target_igrams[g]) for g in translated_igrams.keys()])
         translated_total = sum(target_igrams.values())
 
+        if clip_count == 0:
+            # Log gives -inf so BLEU will be zero
+            return 0
         total_precision += math.log(clip_count / translated_total)
     total_precision /= n
         

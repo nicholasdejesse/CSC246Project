@@ -12,10 +12,10 @@ from model import Transformer
 
 # Hyperparameters
 batch_size = 64
-num_batches = 200
+num_batches = 10000
 vocab_size = 8000
 
-model_name = "test_model"
+model_name = "10k_batches_full_model_8k_vocab"
 save_path = f"./models/{model_name}.pt"
 checkpoint_save_dir = f"./checkpoints/{model_name}/"
 tokenizer_save_dir = f"./tokenizer.json"
@@ -33,7 +33,7 @@ def main():
         "pad": "<PAD>"
     }
 
-    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=vocab_size)
+    tokenizer = Tokenizer(data.df, special_tokens=special)
     if os.path.exists(tokenizer_save_dir):
         try:
             tokenizer.load(tokenizer_save_dir)
@@ -52,7 +52,11 @@ def main():
 
     model = Transformer(tokenizer, device)
     model.to(device)
-    model.train_model(train_loader=train_loader, test_loader=test_loader, num_batches=num_batches, checkpoint_dir=checkpoint_save_dir)
+
+    # Sum all parameters
+    print(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
+
+    model.train_model(train_loader=train_loader, test_loader=test_loader, num_batches=num_batches, checkpoint_dir=checkpoint_save_dir, save_intermediate_checkpoints=False)
 
     os.makedirs("models/", exist_ok=True)
     torch.save(model.state_dict(), save_path)

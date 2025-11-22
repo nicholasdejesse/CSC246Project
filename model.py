@@ -9,6 +9,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 import pandas as pd
 import os
+import json
 
 from bleu import calculate_bleu
 
@@ -20,7 +21,7 @@ num_encoder_blocks = 6
 num_decoder_blocks = 6
 max_encoder_len = 512
 max_decoder_len = 512
-eval_iters = 8
+eval_iters = 4 # Can be low because each iteration evaluates an entire batch
 dropout = 0.3
 pos_embd_mode = "sin"
 
@@ -127,30 +128,28 @@ class Transformer(nn.Module):
         self.tokenizer = tokenizer
         self.device = device
 
-        self.tok_embd_enc = nn.Embedding(num_embeddings=tokenizer.n, embedding_dim=d_model)
-        self.tok_embd_dec = nn.Embedding(num_embeddings=tokenizer.n, embedding_dim=d_model)
-        self.pos_embd_enc = nn.Embedding(num_embeddings=max_encoder_len, embedding_dim=d_model)
-        self.pos_embd_dec = nn.Embedding(num_embeddings=max_decoder_len, embedding_dim=d_model)
+        self.tok_embd_enc = nn.Embedding(num_embeddings=tokenizer.vocab_size, embedding_dim=d_model)
+        self.tok_embd_dec = nn.Embedding(num_embeddings=tokenizer.vocab_size, embedding_dim=d_model)
 
         # Pass each encoder block as an arg
         self.encoder_blocks = nn.Sequential(*(EncoderBlock(device) for _ in range(num_encoder_blocks)))
         # Kept as list because sequential can't take in multiple inputs (and we need to pass in encoder logits)
         self.decoder_blocks = nn.ModuleList([DecoderBlock(device) for _ in range(num_decoder_blocks)])
-        self.lin = nn.Linear(d_model, self.tokenizer.n)
+        self.lin = nn.Linear(d_model, self.tokenizer.vocab_size)
         self.dropout = nn.Dropout(dropout)
 
         lmda = lambda epoch : (d_model ** -0.5) * min((epoch + 1) ** -0.5, (epoch + 1) * warmup_steps ** -1.5)
         self.optim = optim.AdamW(self.parameters(), lr=1)
         self.lr_schedule = scheduler.LambdaLR(self.optim, lmda)
 
-        self.loss_info = {"Batch": [], "Train loss": [], "Test loss": []}
+        self.loss_info = {"Batch": [], "Train loss": [], "Test loss": [], "Train BLEU": [], "Test BLEU": []}
 
 
     def forward(self, enc_in, dec_in):
         _, enc_t = enc_in.shape
         _, dec_t = dec_in.shape
-        enc_in = self.tok_embd_enc(enc_in) + self.pos_embd_enc(self.pos_enc(enc_t))
-        dec_in = self.tok_embd_dec(dec_in) + self.pos_embd_dec(self.pos_enc(dec_t))
+        enc_in = self.tok_embd_enc(enc_in) + self.pos_enc(enc_t)
+        dec_in = self.tok_embd_dec(dec_in) + self.pos_enc(dec_t)
         enc_in = self.dropout(enc_in)
         dec_in = self.dropout(dec_in)
         enc_out = self.encoder_blocks(enc_in)
@@ -159,15 +158,22 @@ class Transformer(nn.Module):
         dec_in = self.lin(dec_in)
         return dec_in # (B, T, C)
 
-    def train_model(self, train_loader, test_loader, num_batches, checkpoint_dir):
+    def train_model(self, train_loader, test_loader, num_batches, checkpoint_dir, save_intermediate_checkpoints):
+        def save_checkpoint(iter):
+            chk_dir = f"{checkpoint_dir}{iter}"
+            if os.path.isdir(chk_dir):
+                return
+            os.makedirs(chk_dir, exist_ok=True)
+            full_path = f"{chk_dir}/checkpoint.pt"
+            torch.save(self.state_dict(), full_path)
+            print(f"Checkpoint saved as {full_path}\n")
+
         self.train()
+        self.dump_model_info(checkpoint_dir)
         for b in range(num_batches):
             if b % 1000 == 0:
-                chk_dir = f"{checkpoint_dir}{b}"
-                os.makedirs(chk_dir, exist_ok=True)
-                full_path = f"{chk_dir}/checkpoint.pt"
-                torch.save(self.state_dict(), full_path)
-                print(f"Checkpoint saved as {full_path}\n")
+                if save_intermediate_checkpoints:
+                    save_checkpoint(b)
             if b % 100 == 0:
                 train_loss, test_loss = self.estimate_loss(train_loader, test_loader)
                 train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader)
@@ -192,18 +198,18 @@ class Transformer(nn.Module):
             self.optim.step()
             self.lr_schedule.step()
 
-        pd.DataFrame(self.loss_info).to_csv(checkpoint_dir, index=False)
+        save_checkpoint(b)
+        pd.DataFrame(self.loss_info).to_csv(f"{checkpoint_dir}{num_batches}", index=False)
 
-    # TODO: Do the sin cos thing described in paper
     def pos_enc(self, length):
         if pos_embd_mode == "sin":
             # Sinusoidal positional embedding shown in AIAYN
-            pos = torch.arange(length, dtype=torch.float32).unsqueeze(1) # Row, has to be float32 instead of int64 because we are dividing
-            i = (torch.arange(d_model // 2)).unsqueeze(1).T # Column
+            pos = torch.arange(length, dtype=torch.float32, device=self.device).unsqueeze(1) # Row
+            i = (torch.arange(d_model // 2, device=self.device)).unsqueeze(1).T # Column
             i = 10000 ** -(2 * i / d_model)
             # Number of columns is half of what we need because it will be spread out when creating final result
             ang = pos @ i # Inner product to get inputs to trig functions
-            res = torch.zeros((length, d_model))
+            res = torch.zeros((length, d_model), device=self.device)
             res[:,0::2] = torch.sin(ang)
             res[:,1::2] = torch.cos(ang)
             return res
@@ -252,12 +258,39 @@ class Transformer(nn.Module):
             total_bleu = 0
             for k in range(eval_iters):
                 in_lang, out_lang = next(iter(loader))
-                translated = self.generate(in_lang)[1:-1] # Remove <BOS> and <EOS>
-                total_bleu += calculate_bleu(translated, self.tokenizer.encode(out_lang))
+                for in_traj, out_traj in zip(in_lang, out_lang):
+                    # print(f"In: {in_traj}")
+                    # print(f"Out: {out_traj}")
+                    translated = self.generate(in_traj).squeeze()[1:-1] # Remove <BOS> and <EOS>
+                    # print(f"Translated: {translated.tolist()}")
+                    bleu = calculate_bleu(translated.tolist(), self.tokenizer.encode(out_traj))
+                    # print(f"BLEU score: {bleu}")
+                    total_bleu += bleu
             total_bleu /= eval_iters
             bleus.append(total_bleu)
         self.train()
         return bleus
+    
+    def dump_model_info(self, path):
+        config = {
+            "total_parameters":sum(p.numel() for p in self.parameters()),
+            "d_model": d_model,
+            "ff_hidden_size": ff_hidden_size,
+            "mha_heads": mha_heads,
+            "num_encoder_blocks": num_encoder_blocks,
+            "num_decoder_blocks": num_decoder_blocks,
+            "max_encoder_len": max_encoder_len,
+            "max_decoder_len": max_decoder_len,
+            "eval_iters": eval_iters,
+            "dropout": dropout,
+            "pos_embd_mode": pos_embd_mode,
+            "lr": lr,
+            "warmup_steps": warmup_steps,
+        }
+        os.makedirs(path, exist_ok=True)
+        with open(f"{path}/info.json", "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+
 
 def get_batch(loader, tokenizer, device):
     in_lang, out_lang = next(iter(loader))
@@ -276,15 +309,5 @@ def process_batch(batch, tokenizer, special_tokens):
     bos = tokenizer.encode(special_tokens["bos"])
     eos = tokenizer.encode(special_tokens["eos"])
     tokenized = [torch.tensor(bos + tokenizer.encode(b) + eos, dtype=torch.long) for b in batch]
-    batch = pad_sequence(tokenized, batch_first=True, padding_value=tokenizer.tok_to_int[special_tokens["pad"]])
+    batch = pad_sequence(tokenized, batch_first=True, padding_value=tokenizer.encode(special_tokens["pad"])[0])
     return batch
-
-def main():
-    length = 3
-    d_model = 4
-
-
-    print(res)
-    print(res.shape)
-if __name__ == "__main__":
-    main()

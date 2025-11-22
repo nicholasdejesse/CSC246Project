@@ -22,6 +22,7 @@ class Tokenizer:
         self.vocab = {}
 
     def train(self, vocab_size):
+        self.vocab_size = vocab_size
         num_merges = vocab_size - 256
         ids = list(self.tokens)
 
@@ -42,6 +43,8 @@ class Tokenizer:
             self.vocab[idx] = self.vocab[p0] + self.vocab[p1]
         for tok, idx in self.sp_tok_to_id.items():
             self.vocab[idx] = tok.encode("utf-8")
+    
+        
     def decode(self,ids):
         tokens = b"".join(self.vocab[idx] for idx in ids)
         text = tokens.decode("utf-8", errors="replace")
@@ -82,21 +85,18 @@ class Tokenizer:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    @staticmethod
-    def load(path):
+    def load(self, path):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        tok = Tokenizer(data="", special_tokens=data["special_tokens"])
+        self.__init__(data="", special_tokens=data["special_tokens"])
 
         # Restore core structures
-        tok.vocab = {int(k): v.encode("utf-8") for k, v in data["vocab"].items()}
-        tok.merges = {tuple(map(int, k.split(","))): v for k, v in data["merges"].items()}
-        tok.sp_tok_to_id = {k: int(v) for k, v in data["sp_tok_to_id"].items()}
-        tok.sp_ids = set(tok.sp_tok_to_id.values())
-
-        return tok
-
+        self.vocab = {int(k): v.encode("utf-8") for k, v in data["vocab"].items()}
+        self.merges = {tuple(map(int, k.split(","))): v for k, v in data["merges"].items()}
+        self.sp_tok_to_id = {k: int(v) for k, v in data["sp_tok_to_id"].items()}
+        self.sp_ids = set(self.sp_tok_to_id.values())
+        self.vocab_size = len(self.vocab)
 
 def get_stats(ids, sp_ids):
     counts = {}
