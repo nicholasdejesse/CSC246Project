@@ -15,8 +15,7 @@ batch_size = 64
 num_batches = 100000
 vocab_size = 8000
 
-model_name = "100k_batches_full_model_8k_vocab"
-save_path = f"./models/{model_name}.pt"
+model_name = "100k_batches_after_fixes"
 checkpoint_save_dir = f"./checkpoints/{model_name}/"
 tokenizer_save_dir = f"./tokenizer.json"
 
@@ -56,13 +55,15 @@ def main():
     # Sum all parameters
     print(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
 
-    # Model is also saved in this function
+    # Model is also saved to disk in this function
     model.train_model(
         train_loader=train_loader,
         test_loader=test_loader,
         num_batches=num_batches,
         checkpoint_dir=checkpoint_save_dir,
-        save_intermediate_checkpoints=False
+        save_intermediate_checkpoints=False,
+        calculate_bleu=True, # Only set to False when debugging (BLEU takes a while to calculate)
+        print_examples=True
     )
 
 if __name__ == "__main__":

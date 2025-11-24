@@ -21,7 +21,7 @@ num_encoder_blocks = 6
 num_decoder_blocks = 6
 max_encoder_len = 512
 max_decoder_len = 512
-eval_iters = 2 # Can be low because each iteration evaluates an entire batch
+eval_iters = 1 # Can be low because each iteration evaluates an entire batch
 dropout = 0.3
 pos_embd_mode = "sin"
 
@@ -42,22 +42,37 @@ class Head(nn.Module):
         self.is_masked = is_masked
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, enc = None):
-        # x is (B, T, C)
-        _, T, _ = x.shape
+    def forward(self, x, enc = None, enc_pad = None, dec_pad = None):
         if enc is None:
-            query, key, value = self.w_q(x), self.w_k(x), self.w_v(x) # Each (B, T, H)
+            query, key, value = self.w_q(x), self.w_k(x), self.w_v(x) # Each (B, T_dec, H)
         else:
-            query, key, value = self.w_q(x), self.w_k(enc), self.w_v(enc) # Each (B, T, H)
+            query, key, value = self.w_q(x), self.w_k(enc), self.w_v(enc) # (B, T_dec, H), (B, T_enc, H), (B, T_enc, H)
+            _, T_enc, _ = key.shape
+            _, T_dec, _ = query.shape
         res = query @ key.transpose(1, 2) # (B, T, T)
         res /= self.head_dim ** 0.5 # (B, T, T)
 
+        B, T, _ = x.shape
+        # Padding mask (i.e. ignore pad tokens)
+        if enc_pad is not None:
+            mask = enc_pad
+            if enc is None:
+                mask = mask.unsqueeze(1).expand(B, T, T)
+            else:
+                mask = mask.unsqueeze(1).expand(B, T_dec, T_enc)
+        else:
+            mask = dec_pad.unsqueeze(1).expand(B, T, T)
+
+        # Causal mask (i.e. prevent tokens from attending to future ones)
         if self.is_masked:
-            mask = torch.tril(torch.ones((T, T))).to(self.device)
-            res = res.masked_fill(mask == 0, float("-inf"))
+            # x is (B, T_dec, C)
+            mask = torch.logical_and(mask, torch.tril(torch.ones((T, T), dtype=torch.bool)).to(self.device))
+
+        res = res.masked_fill(mask == 0, float("-inf"))
+
         res = F.softmax(res, dim=-1)
-        res = res @ value
         res = self.dropout(res)
+        res = res @ value
         return res
 
 class MultiHeadAttention(nn.Module):
@@ -65,12 +80,12 @@ class MultiHeadAttention(nn.Module):
         super().__init__()
         self.device = device
         head_dim = d_model // num_heads
-        self.heads = [Head(is_masked=is_masked, head_dim=head_dim, device=device) for _ in range(num_heads)]
+        self.heads = nn.ModuleList([Head(is_masked=is_masked, head_dim=head_dim, device=device) for _ in range(num_heads)])
         self.lin = nn.Linear(d_model, d_model)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, enc = None):
-        res = [h(x, enc) for h in self.heads]
+    def forward(self, x, enc = None, enc_pad = None, dec_pad = None):
+        res = [h(x=x, enc=enc, enc_pad=enc_pad, dec_pad=dec_pad) for h in self.heads]
         res = torch.cat(res, dim=-1)
         res = self.lin(res)
         res = self.dropout(res)
@@ -98,8 +113,8 @@ class EncoderBlock(nn.Module):
         self.ln1 = nn.LayerNorm(d_model)
         self.ln2 = nn.LayerNorm(d_model)
 
-    def forward(self, x):
-        x = x + self.mha(x)
+    def forward(self, x, enc_pad):
+        x = x + self.mha(x, enc=None, enc_pad=enc_pad, dec_pad=None)
         x = self.ln1(x)
         x = x + self.ff(x)
         x = self.ln2(x)
@@ -115,10 +130,10 @@ class DecoderBlock(nn.Module):
         self.ln2 = nn.LayerNorm(d_model)
         self.ln3 = nn.LayerNorm(d_model)
 
-    def forward(self, x, enc):
-        x = x + self.masked_mha(x)
+    def forward(self, x, enc = None, enc_pad = None, dec_pad = None):
+        x = x + self.masked_mha(x, enc=None, dec_pad=dec_pad)
         x = self.ln1(x)
-        x = x + self.mha(x, enc)
+        x = x + self.mha(x, enc, enc_pad=enc_pad)
         x = self.ln2(x)
         x = x + self.ff(x)
         x = self.ln3(x)
@@ -134,7 +149,7 @@ class Transformer(nn.Module):
         self.tok_embd_dec = nn.Embedding(num_embeddings=tokenizer.vocab_size, embedding_dim=d_model)
 
         # Pass each encoder block as an arg
-        self.encoder_blocks = nn.Sequential(*(EncoderBlock(device) for _ in range(num_encoder_blocks)))
+        self.encoder_blocks = nn.ModuleList([EncoderBlock(device) for _ in range(num_encoder_blocks)])
         # Kept as list because sequential can't take in multiple inputs (and we need to pass in encoder logits)
         self.decoder_blocks = nn.ModuleList([DecoderBlock(device) for _ in range(num_decoder_blocks)])
         self.lin = nn.Linear(d_model, self.tokenizer.vocab_size)
@@ -147,29 +162,37 @@ class Transformer(nn.Module):
         self.loss_info = {"batch": [], "train_loss": [], "test_loss": [], "train_bleu": [], "test_bleu": []}
 
 
-    def forward(self, enc_in, dec_in):
+    def forward(self, enc_in, dec_in, enc_pad, dec_pad):
         _, enc_t = enc_in.shape
         _, dec_t = dec_in.shape
+        # (B, T, C) + (T, C)
         enc_in = self.tok_embd_enc(enc_in) + self.pos_enc(enc_t)
         dec_in = self.tok_embd_dec(dec_in) + self.pos_enc(dec_t)
+
         enc_in = self.dropout(enc_in)
         dec_in = self.dropout(dec_in)
-        enc_out = self.encoder_blocks(enc_in)
+        
+        for e in self.encoder_blocks:
+            enc_in = e(enc_in, enc_pad)
+
         for d in self.decoder_blocks:
-            dec_in = d(dec_in, enc_out)
+            dec_in = d(dec_in, enc_in, enc_pad, dec_pad)
         dec_in = self.lin(dec_in)
         return dec_in # (B, T, C)
 
-    def train_model(self, train_loader, test_loader, num_batches, checkpoint_dir, save_intermediate_checkpoints):
+    def train_model(self, train_loader, test_loader, num_batches, checkpoint_dir, save_intermediate_checkpoints, calculate_bleu, print_examples):
         self.train()
-        self.dump_model_info(checkpoint_dir)
+        self.dump_model_info(checkpoint_dir, num_batches)
         for b in range(num_batches):
             if b % save_freq == 0:
                 if save_intermediate_checkpoints:
                     self.save_checkpoint(checkpoint_dir, b+1)
             if b % log_freq == 0:
                 train_loss, test_loss = self.estimate_loss(train_loader, test_loader)
-                train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader)
+                if calculate_bleu:
+                    train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader, print_examples)
+                else:
+                    train_bleu, test_bleu = 0, 0
                 print(f"---Epoch {b}, Train loss: {train_loss:.3f}, Test loss: {test_loss:.3f}, Train BLEU: {train_bleu:.5f}, Test BLEU: {test_bleu:.5f}---")
                 self.loss_info["batch"].append(b)
                 self.loss_info["train_loss"].append(train_loss.item())
@@ -177,9 +200,9 @@ class Transformer(nn.Module):
                 self.loss_info["train_bleu"].append(train_bleu)
                 self.loss_info["test_bleu"].append(test_bleu)
             
-            enc_in, dec_in, target = get_batch(train_loader, self.tokenizer, self.device)
+            enc_in, dec_in, target, enc_pad, dec_pad = get_batch(train_loader, self.tokenizer, self.device)
 
-            out = self(enc_in, dec_in)
+            out = self(enc_in, dec_in, enc_pad, dec_pad)
             B, T, C = out.shape
             out = out.view(B*T, C)
             target = target.view(-1)
@@ -227,11 +250,15 @@ class Transformer(nn.Module):
         print(f"Checkpoint saved to {chk_dir}")
 
     def generate(self, encoder_input):
+        """
+        Only works for batch size = 1 for now.
+        """
         encoder_input = torch.tensor(self.tokenizer.encode(encoder_input), dtype=torch.long, device=self.device).unsqueeze(0)
         context = torch.tensor(self.tokenizer.encode(self.tokenizer.special_tokens["bos"]), dtype=torch.long, device=self.device).unsqueeze(0)
+        pad = self.tokenizer.encode(self.tokenizer.special_tokens["pad"])[0]
         for _ in range(max_decoder_len):
             with torch.no_grad():
-                out = self(encoder_input, context)
+                out = self(encoder_input, context, (encoder_input != pad).to(self.device), (context != pad).to(self.device))
             out = out[:, -1, :] # Extract data for last token (B, C)
             out = F.softmax(out, 1) # (B, C)
             # tok = out.argmax(1).unsqueeze(0) # Greedy
@@ -247,9 +274,9 @@ class Transformer(nn.Module):
         for loader in [train_loader, test_loader]:
             total_loss = 0
             for k in range(eval_iters):
-                enc_in, dec_in, target = get_batch(loader, self.tokenizer, self.device)
+                enc_in, dec_in, target, enc_pad, dec_pad = get_batch(loader, self.tokenizer, self.device)
                 with torch.no_grad():
-                    out = self(enc_in, dec_in)
+                    out = self(enc_in, dec_in, enc_pad, dec_pad)
                 B, T, C = out.shape
                 out = out.view(B*T, C)
                 target = target.view(-1)
@@ -259,9 +286,10 @@ class Transformer(nn.Module):
         self.train()
         return losses
 
-    def estimate_bleu_score(self, train_loader, test_loader):
+    def estimate_bleu_score(self, train_loader, test_loader, print_examples):
         self.eval()
         bleus = []
+        printed_example = False
         for loader in [train_loader, test_loader]:
             total_bleu = 0
             for k in range(eval_iters):
@@ -274,13 +302,21 @@ class Transformer(nn.Module):
                     bleu = calculate_bleu(translated.tolist(), self.tokenizer.encode(out_traj))
                     # print(f"BLEU score: {bleu}")
                     total_bleu += bleu
+                    if print_examples and not printed_example:
+                        print("EXAMPLE")
+                        print(f"Encoder input:   {in_traj}")
+                        print(f"Expected output: {out_traj}")
+                        print(f"Actual output:   {self.tokenizer.decode(translated.tolist())}")
+                        print("\n")
+                        printed_example = True
             total_bleu /= eval_iters
             bleus.append(total_bleu)
         self.train()
         return bleus
     
-    def dump_model_info(self, path):
+    def dump_model_info(self, path, num_batches):
         config = {
+            "num_batches":num_batches,
             "total_parameters":sum(p.numel() for p in self.parameters()),
             "d_model": d_model,
             "ff_hidden_size": ff_hidden_size,
@@ -302,19 +338,22 @@ class Transformer(nn.Module):
 def get_batch(loader, tokenizer, device):
     in_lang, out_lang = next(iter(loader))
     # Each (B, T)
-    enc_in = process_batch(in_lang, tokenizer, special_tokens=tokenizer.special_tokens)
-    out_lang_processed = process_batch(out_lang, tokenizer, special_tokens=tokenizer.special_tokens)
+    enc_in, enc_pad = process_batch(in_lang, tokenizer, special_tokens=tokenizer.special_tokens, device=device)
+    out_lang_processed, dec_pad = process_batch(out_lang, tokenizer, special_tokens=tokenizer.special_tokens, device=device)
 
+    dec_pad = dec_pad[:, :-1]
     dec_in = out_lang_processed[:, :-1]
     target = out_lang_processed[:, 1:]
 
     enc_in, dec_in, target = enc_in.to(device), dec_in.to(device), target.to(device)
 
-    return enc_in, dec_in, target
+    return enc_in, dec_in, target, enc_pad, dec_pad
 
-def process_batch(batch, tokenizer, special_tokens):
+def process_batch(batch, tokenizer, special_tokens, device):
     bos = tokenizer.encode(special_tokens["bos"])
     eos = tokenizer.encode(special_tokens["eos"])
+    pad = tokenizer.encode(special_tokens["pad"])[0]
     tokenized = [torch.tensor(bos + tokenizer.encode(b) + eos, dtype=torch.long) for b in batch]
-    batch = pad_sequence(tokenized, batch_first=True, padding_value=tokenizer.encode(special_tokens["pad"])[0])
-    return batch
+    batch = pad_sequence(tokenized, batch_first=True, padding_value=pad)
+    pad_mask = (batch != pad).to(device)
+    return batch, pad_mask

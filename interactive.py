@@ -4,7 +4,7 @@ from model import Transformer
 from dataset import EnglishToSpanish
 from tokenizer import Tokenizer
 
-model_load_path = "./checkpoints/100k_batches_full_model_8k_vocab/100000/checkpoint.pt"
+model_load_path = "./checkpoints/100k_batches_after_fixes/100000/checkpoint.pt"
 tokenizer_path = "./tokenizer.json"
 
 def main():
@@ -29,9 +29,9 @@ def main():
 
     model.eval()
     while True:
-        encoder_in = input("Enter English words:")
+        encoder_in = input("Enter English words: ")
         out = model.generate(encoder_in)
-        print(tokenizer.decode(out.squeeze().tolist()))
+        print(f"Translated: {tokenizer.decode(out.squeeze().tolist())}")
 
 if __name__ == "__main__":
     main()
