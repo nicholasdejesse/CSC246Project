@@ -30,6 +30,8 @@ log_freq = 1000
 
 # Increase lr at start then start decreasing it after warmup_steps
 lr_warmup_steps = 4000
+lr_max = 3e-4
+lr_min = 1e-6
 
 class Head(nn.Module):
     def __init__(self, is_masked, head_dim, device):
@@ -140,7 +142,7 @@ class DecoderBlock(nn.Module):
         return x
 
 class Transformer(nn.Module):
-    def __init__(self, tokenizer, device):
+    def __init__(self, tokenizer, device, scheduler_num_batches = None):
         super().__init__()
         self.tokenizer = tokenizer
         self.device = device
@@ -155,9 +157,14 @@ class Transformer(nn.Module):
         self.lin = nn.Linear(d_model, self.tokenizer.vocab_size)
         self.dropout = nn.Dropout(dropout)
 
-        lmda = lambda epoch : (d_model ** -0.5) * min((epoch + 1) ** -0.5, (epoch + 1) * lr_warmup_steps ** -1.5)
-        self.optim = optim.AdamW(self.parameters(), lr=1)
-        self.lr_schedule = scheduler.LambdaLR(self.optim, lmda)
+        self.optim = optim.AdamW(self.parameters(), lr=lr_max)
+
+        # This is None when we are running inference
+        if scheduler_num_batches is not None:
+            # Cosine lr scheduler with warmup
+            warmup_scheduler = scheduler.LinearLR(self.optim, start_factor=lr_min, end_factor=1, total_iters=lr_warmup_steps)
+            cosine_scheduler = scheduler.CosineAnnealingLR(self.optim, T_max=scheduler_num_batches - lr_warmup_steps, eta_min=lr_min)
+            self.lr_schedule = scheduler.SequentialLR(self.optim, schedulers=[warmup_scheduler, cosine_scheduler], milestones=[lr_warmup_steps])
 
         self.loss_info = {"batch": [], "train_loss": [], "test_loss": [], "train_bleu": [], "test_bleu": []}
 
@@ -193,7 +200,7 @@ class Transformer(nn.Module):
                     train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader, print_examples)
                 else:
                     train_bleu, test_bleu = 0, 0
-                print(f"---Epoch {b}, Train loss: {train_loss:.3f}, Test loss: {test_loss:.3f}, Train BLEU: {train_bleu:.5f}, Test BLEU: {test_bleu:.5f}---")
+                print(f"---Batch {b}, Train loss: {train_loss:.3f}, Test loss: {test_loss:.3f}, Train BLEU: {train_bleu:.5f}, Test BLEU: {test_bleu:.5f}---")
                 self.loss_info["batch"].append(b)
                 self.loss_info["train_loss"].append(train_loss.item())
                 self.loss_info["test_loss"].append(test_loss.item())
@@ -207,8 +214,8 @@ class Transformer(nn.Module):
             out = out.view(B*T, C)
             target = target.view(-1)
             # Ignore padding tokens in loss
-            loss = F.cross_entropy(out, target, ignore_index=self.tokenizer.encode(self.tokenizer.special_tokens["pad"])[0])
-
+            loss = F.cross_entropy(out, target, ignore_index=self.tokenizer.encode(self.tokenizer.special_tokens["pad"])[0], label_smoothing=0.1)
+            torch.nn.utils.clip_grad_norm_(self.parameters(), 1) # Clip gradient to 1 for stability
             self.optim.zero_grad()
             loss.backward()
             self.optim.step()
@@ -280,7 +287,7 @@ class Transformer(nn.Module):
                 B, T, C = out.shape
                 out = out.view(B*T, C)
                 target = target.view(-1)
-                total_loss += F.cross_entropy(out, target, ignore_index=self.tokenizer.encode(self.tokenizer.special_tokens["pad"])[0])
+                total_loss += F.cross_entropy(out, target, ignore_index=self.tokenizer.encode(self.tokenizer.special_tokens["pad"])[0], label_smoothing=0.1)
             total_loss /= eval_iters
             losses.append(total_loss)
         self.train()
