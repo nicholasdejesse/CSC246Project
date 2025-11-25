@@ -31,7 +31,7 @@ log_freq = 1000
 # Increase lr at start then start decreasing it after warmup_steps
 lr_warmup_steps = 4000
 lr_max = 3e-4
-lr_min = 1e-6
+lr_min = 1e-6 # Need to look into a better value for this, kind of arbitrary right now
 
 class Head(nn.Module):
     def __init__(self, is_masked, head_dim, device):

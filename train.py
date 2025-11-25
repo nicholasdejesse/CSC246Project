@@ -49,7 +49,7 @@ def main():
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
 
-    model = Transformer(tokenizer, device)
+    model = Transformer(tokenizer, device, scheduler_num_batches=num_batches)
     model.to(device)
 
     # Sum all parameters

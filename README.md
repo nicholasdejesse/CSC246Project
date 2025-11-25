@@ -5,3 +5,4 @@
 - ["Attention Is All You Need"](https://arxiv.org/abs/1706.03762)
 - [English Spanish translation dataset](https://www.kaggle.com/datasets/lonnieqin/englishspanish-translation-dataset): Kaggle dataset for English to Spanish translation.
 - [Describes BLEU score](https://www.geeksforgeeks.org/nlp/nlp-bleu-score-for-evaluating-neural-machine-translation-python/)
+- [GPT-3 paper has a lot of good implementation information, like cosine lr scheduler with warmup](https://arxiv.org/pdf/2005.14165)
