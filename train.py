@@ -12,10 +12,10 @@ from model import Transformer
 
 # Hyperparameters
 batch_size = 64
-num_batches = 100000
+num_batches = 50000
 vocab_size = 8000
 
-model_name = "100k_batches_after_fixes"
+model_name = "50k_smaller_model"
 checkpoint_save_dir = f"./checkpoints/{model_name}/"
 tokenizer_save_dir = f"./tokenizer.json"
 

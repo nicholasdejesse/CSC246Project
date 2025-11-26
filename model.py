@@ -14,11 +14,11 @@ import json
 from bleu import calculate_bleu
 
 # Hyperparameters (TODO: move these somewhere else (argparse)?)
-d_model = 512
-ff_hidden_size = 2048
-mha_heads = 8
-num_encoder_blocks = 6
-num_decoder_blocks = 6
+d_model = 256
+ff_hidden_size = 1024
+mha_heads = 4
+num_encoder_blocks = 3
+num_decoder_blocks = 3
 max_encoder_len = 512
 max_decoder_len = 512
 eval_iters = 1 # Can be low because each iteration evaluates an entire batch
@@ -29,7 +29,7 @@ save_freq = 1000
 log_freq = 1000
 
 # Increase lr at start then start decreasing it after warmup_steps
-lr_warmup_steps = 4000
+lr_warmup_steps = 2000
 lr_max = 3e-4
 lr_min = 1e-6 # Need to look into a better value for this, kind of arbitrary right now
 
@@ -310,14 +310,14 @@ class Transformer(nn.Module):
                     # print(f"BLEU score: {bleu}")
                     total_bleu += bleu
                     if print_examples and not printed_example:
-                        print("EXAMPLE")
+                        print(f"EXAMPLE ({'train' if loader is train_loader else 'test'})")
                         print(f"Encoder input:   {in_traj}")
                         print(f"Expected output: {out_traj}")
                         print(f"Actual output:   {self.tokenizer.decode(translated.tolist())}")
-                        print("\n")
                         printed_example = True
             total_bleu /= eval_iters
             bleus.append(total_bleu)
+            printed_example = False
         self.train()
         return bleus
     
