@@ -65,7 +65,7 @@ class Tokenizer:
                     matched = True
                     break
             if not matched:
-                tokens.append(ord(text[i]))
+                tokens.append(text.encode("utf-8")[i])
                 i += 1
         while len(tokens) >= 2:
             stats = get_stats(tokens, self.sp_ids)
