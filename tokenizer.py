@@ -20,14 +20,17 @@ class Tokenizer:
         self.merges = {}
         self.sp_ids = set(self.sp_tok_to_id.values())
         self.vocab = {}
+        self.vocab = {idx: bytes([idx]) for idx in range(256)}
+        for i, tok in enumerate(self.special_tokens.values()):
+            self.sp_tok_to_id[tok] = 256 + i
+        for tok, idx in self.sp_tok_to_id.items():
+            self.vocab[idx] = tok.encode("utf-8")
 
     def train(self, vocab_size):
         self.vocab_size = vocab_size
         num_merges = vocab_size - 256
         ids = list(self.tokens)
 
-        for i, tok in enumerate(self.special_tokens.values()):
-            self.sp_tok_to_id[tok] = vocab_size + i
 
         for i in range(num_merges):
             stats = get_stats(ids, self.sp_ids)
@@ -38,15 +41,15 @@ class Tokenizer:
             ids = bpe_merge(ids, self.sp_ids, pair, idx)
             self.merges[pair] = idx
         # Decoding
-        self.vocab = {idx: bytes([idx]) for idx in range(256)}
         for (p0, p1), idx in self.merges.items():
             self.vocab[idx] = self.vocab[p0] + self.vocab[p1]
-        for tok, idx in self.sp_tok_to_id.items():
-            self.vocab[idx] = tok.encode("utf-8")
     
         
     def decode(self,ids):
-        tokens = b"".join(self.vocab[idx] for idx in ids)
+        if ids:
+            tokens = b"".join(self.vocab[idx] for idx in ids)
+        else:
+            tokens = self.vocab
         text = tokens.decode("utf-8", errors="replace")
         return text
 
@@ -62,7 +65,7 @@ class Tokenizer:
                     matched = True
                     break
             if not matched:
-                tokens.append(text.encode("utf-8")[i])
+                tokens.append(ord(text[i]))
                 i += 1
         while len(tokens) >= 2:
             stats = get_stats(tokens, self.sp_ids)
@@ -125,14 +128,14 @@ def bpe_merge(ids, sp_ids, pair, idx):
 if __name__ == "__main__":
     train = "Wowwy, CSC 246 is an amazing course!"
     special = {
-        "bos": "[BOS]",
-        "eos": "[EOS]",
-        "pad": "[PAD]"
+        "[BOS]": "[BOS]",
+        "[EOS]": "[EOS]",
+        "[PAD]": "[PAD]"
 
     }
 
     tkn = Tokenizer(train, special_tokens=special)
-    tkn.train(vocab_size=276)
+    #tkn.train(vocab_size=276)
 
     test = "[BOS]Wowy, CSC 246 is an amazing course![EOS][PAD][PAD]"
     print(f"Encoded: {tkn.encode(test)}")

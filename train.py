@@ -25,7 +25,7 @@ def main():
     # path = kagglehub.dataset_download("lonnieqin/englishspanish-translation-dataset")
     # print("Path to dataset files:", path)
 
-    data = EnglishToSpanish("./data/data.csv")
+    data = EnglishToSpanish("./data.csv")
     special = {
         "bos": "<BOS>",
         "eos": "<EOS>",
