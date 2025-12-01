@@ -139,7 +139,7 @@ if __name__ == "__main__":
     }
 
     tkn = Tokenizer(train, special_tokens=special,vocab_size=276)
-    tkn.train()
+    #tkn.train()
 
     test = "[BOS]Wowy, español CSC 246 is an amazing course![EOS][PAD][PAD]"
     print(f"Encoded: {tkn.encode(test)}")

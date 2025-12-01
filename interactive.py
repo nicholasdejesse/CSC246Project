@@ -4,7 +4,7 @@ from model import Transformer
 from dataset import EnglishToSpanish
 from tokenizer import Tokenizer
 
-model_load_path = "./checkpoints/50k_smaller_model/50000/checkpoint.pt"
+model_load_path = "./checkpoints/100k_model/100000/checkpoint.pt"
 tokenizer_path = "./tokenizer.json"
 
 vocab_size = 8003

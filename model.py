@@ -197,7 +197,11 @@ class Transformer(nn.Module):
             if b % log_freq == 0:
                 train_loss, test_loss = self.estimate_loss(train_loader, test_loader)
                 if calculate_bleu:
-                    train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader, print_examples)
+                    if b == 0:
+                        # Set to zero since first test is fully random anyways and BLEU is expensive to compute
+                        train_bleu, test_bleu = 0, 0
+                    else:
+                        train_bleu, test_bleu = self.estimate_bleu_score(train_loader, test_loader, print_examples)
                 else:
                     train_bleu, test_bleu = 0, 0
                 print(f"---Batch {b}, Train loss: {train_loss:.3f}, Test loss: {test_loss:.3f}, Train BLEU: {train_bleu:.5f}, Test BLEU: {test_bleu:.5f}---")
