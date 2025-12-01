@@ -69,13 +69,9 @@ class Tokenizer:
                 char_bytes = text[i].encode("utf-8")
                 tokens.extend(list(char_bytes))
                 i += 1
-        while len(tokens) >= 2:
-            stats = get_stats(tokens, self.sp_ids)
-            pair = min(stats, key=lambda p: self.merges.get(p, float("inf")))
-            if pair not in self.merges:
-                break
-            idx = self.merges[pair]
-            tokens = bpe_merge(tokens, self.sp_ids, pair, idx)
+        for (pair0, pair1), idx in self.merges.items():
+            tokens = bpe_merge(tokens, self.sp_ids, (pair0, pair1), idx)
+
         return tokens
 
     def save(self, path):
