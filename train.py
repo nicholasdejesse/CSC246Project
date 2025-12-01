@@ -32,7 +32,7 @@ def main():
         "pad": "<PAD>"
     }
 
-    tokenizer = Tokenizer(data.df, special_tokens=special)
+    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=8000)
     if os.path.exists(tokenizer_save_dir):
         try:
             tokenizer.load(tokenizer_save_dir)

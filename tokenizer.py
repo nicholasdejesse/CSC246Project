@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 class Tokenizer:
-    def __init__(self, data, special_tokens):
+    def __init__(self, data, special_tokens, vocab_size):
         """
         Args:
             data (string): The training data used to determine the tokens.
@@ -19,19 +19,19 @@ class Tokenizer:
         self.sp_tok_to_id = {}
         self.merges = {}
         self.sp_ids = set(self.sp_tok_to_id.values())
+        self.vocab_size = vocab_size
         self.vocab = {}
         self.vocab = {idx: bytes([idx]) for idx in range(256)}
         for i, tok in enumerate(self.special_tokens.values()):
-            self.sp_tok_to_id[tok] = 256 + i
+            self.sp_tok_to_id[tok] = self.vocab_size + i
         for tok, idx in self.sp_tok_to_id.items():
             self.vocab[idx] = tok.encode("utf-8")
-
-    def train(self, vocab_size):
-        self.vocab_size = vocab_size
-        num_merges = vocab_size - 256
+        self.vocab_size = len(self.vocab)
+    def train(self):
+        num_merges = self.vocab_size - 256
         ids = list(self.tokens)
 
-
+        #Identifying tokens for merging
         for i in range(num_merges):
             stats = get_stats(ids, self.sp_ids)
             if not stats:
@@ -40,16 +40,14 @@ class Tokenizer:
             idx = 256 + i
             ids = bpe_merge(ids, self.sp_ids, pair, idx)
             self.merges[pair] = idx
-        # Decoding
+        # For decoding
         for (p0, p1), idx in self.merges.items():
             self.vocab[idx] = self.vocab[p0] + self.vocab[p1]
-    
-        
+
+
     def decode(self,ids):
-        if ids:
-            tokens = b"".join(self.vocab[idx] for idx in ids)
-        else:
-            tokens = self.vocab
+        #Unmerging tokens
+        tokens = b"".join(self.vocab[idx] for idx in ids)
         text = tokens.decode("utf-8", errors="replace")
         return text
 
@@ -96,10 +94,11 @@ class Tokenizer:
 
         # Restore core structures
         self.vocab = {int(k): v.encode("utf-8") for k, v in data["vocab"].items()}
+        self.vocab_size = len(self.vocab)
         self.merges = {tuple(map(int, k.split(","))): v for k, v in data["merges"].items()}
         self.sp_tok_to_id = {k: int(v) for k, v in data["sp_tok_to_id"].items()}
         self.sp_ids = set(self.sp_tok_to_id.values())
-        self.vocab_size = len(self.vocab)
+
 
 def get_stats(ids, sp_ids):
     counts = {}
@@ -115,6 +114,7 @@ def bpe_merge(ids, sp_ids, pair, idx):
     newids = []
     i = 0
     while i < len(ids):
+        #
         if ids[i] not in sp_ids and ids[i] == pair[0] and i < len(ids) - 1 and ids[i + 1] == pair[1] and ids[
             i + 1] not in sp_ids:
             newids.append(idx)
@@ -134,9 +134,9 @@ if __name__ == "__main__":
 
     }
 
-    tkn = Tokenizer(train, special_tokens=special)
-    #tkn.train(vocab_size=276)
+    tkn = Tokenizer(train, special_tokens=special,vocab_size=276)
+    tkn.train()
 
-    test = "[BOS]Wowy, CSC 246 is an amazing course![EOS][PAD][PAD]"
+    test = "[BOS]Wowy, español CSC 246 is an amazing course![EOS][PAD][PAD]"
     print(f"Encoded: {tkn.encode(test)}")
     print(f"Decoded: {tkn.decode(tkn.encode(test))}")
