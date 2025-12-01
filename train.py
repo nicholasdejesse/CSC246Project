@@ -13,7 +13,7 @@ from model import Transformer
 # Hyperparameters
 batch_size = 64
 num_batches = 50000
-vocab_size = 8000
+vocab_size = 8003
 
 model_name = "50k_smaller_model"
 checkpoint_save_dir = f"./checkpoints/{model_name}/"
@@ -32,10 +32,10 @@ def main():
         "pad": "<PAD>"
     }
 
-    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=8000)
+    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=vocab_size)
     if os.path.exists(tokenizer_save_dir):
         try:
-            tokenizer.load(tokenizer_save_dir)
+            tokenizer.load(tokenizer_save_dir, vocab_size)
         except:
             raise Exception(f"Could not load tokenizer at path {tokenizer_save_dir}")
     else:

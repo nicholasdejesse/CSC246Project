@@ -23,16 +23,19 @@ class Tokenizer:
         self.vocab = {}
         self.vocab = {idx: bytes([idx]) for idx in range(256)}
         for i, tok in enumerate(self.special_tokens.values()):
-            self.sp_tok_to_id[tok] = self.vocab_size + i
+            self.sp_tok_to_id[tok] = vocab_size - len(self.special_tokens) + i
+        self.sp_ids = set(self.sp_tok_to_id.values())
         for tok, idx in self.sp_tok_to_id.items():
             self.vocab[idx] = tok.encode("utf-8")
-        self.vocab_size = len(self.vocab)
+
     def train(self):
-        num_merges = self.vocab_size - 256
+        num_merges = self.vocab_size - 256 - len(self.special_tokens)
         ids = list(self.tokens)
 
         #Identifying tokens for merging
         for i in range(num_merges):
+            if i % 100 == 0:
+                print(f"Merge {i}/{num_merges}")
             stats = get_stats(ids, self.sp_ids)
             if not stats:
                 break
@@ -63,7 +66,8 @@ class Tokenizer:
                     matched = True
                     break
             if not matched:
-                tokens.append(text.encode("utf-8")[i])
+                char_bytes = text[i].encode("utf-8")
+                tokens.extend(list(char_bytes))
                 i += 1
         while len(tokens) >= 2:
             stats = get_stats(tokens, self.sp_ids)
@@ -86,15 +90,15 @@ class Tokenizer:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    def load(self, path):
+    def load(self, path, vocab_size):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        self.__init__(data="", special_tokens=data["special_tokens"])
+        self.__init__(data="", special_tokens=data["special_tokens"], vocab_size=vocab_size)
 
         # Restore core structures
         self.vocab = {int(k): v.encode("utf-8") for k, v in data["vocab"].items()}
-        self.vocab_size = len(self.vocab)
+        self.vocab_size = vocab_size
         self.merges = {tuple(map(int, k.split(","))): v for k, v in data["merges"].items()}
         self.sp_tok_to_id = {k: int(v) for k, v in data["sp_tok_to_id"].items()}
         self.sp_ids = set(self.sp_tok_to_id.values())
