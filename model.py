@@ -23,7 +23,7 @@ max_encoder_len = 512
 max_decoder_len = 512
 eval_iters = 1 # Can be low because each iteration evaluates an entire batch
 dropout = 0.3
-pos_embd_mode = "sin"
+pos_embd_mode = "sin" # Set to "sin" or "index"
 
 save_freq = 1000
 log_freq = 1000
@@ -237,7 +237,7 @@ class Transformer(nn.Module):
             res[:,1::2] = torch.cos(ang)
             return res
         elif pos_embd_mode == "index":
-            return torch.arange(length).to(self.device)
+            return torch.stack([torch.arange(length)] * d_model).T.to(self.device)
         else:
             raise NotImplementedError(pos_embd_mode)
     
