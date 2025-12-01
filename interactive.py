@@ -7,6 +7,8 @@ from tokenizer import Tokenizer
 model_load_path = "./checkpoints/50k_smaller_model/50000/checkpoint.pt"
 tokenizer_path = "./tokenizer.json"
 
+vocab_size = 8003
+
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -17,9 +19,9 @@ def main():
         "pad": "<PAD>"
     }
 
-    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=8003)
+    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=vocab_size)
     try:
-        tokenizer.load(tokenizer_path, vocab_size=8003)
+        tokenizer.load(tokenizer_path, vocab_size=vocab_size)
     except:
         raise Exception(f"Could not load tokenizer at path {tokenizer_path}. Are you sure you trained it?")
 
