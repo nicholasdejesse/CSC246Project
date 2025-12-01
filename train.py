@@ -13,7 +13,7 @@ from model import Transformer
 # Hyperparameters
 batch_size = 64
 num_batches = 50000
-vocab_size = 256
+vocab_size = 259
 
 model_name = "50k_smaller_model"
 checkpoint_save_dir = f"./checkpoints/{model_name}/"
@@ -44,6 +44,7 @@ def main():
         tokenizer.save(tokenizer_save_dir)
         print("Tokenizer training complete.")
 '''
+    tokenizer.train(vocab_size=vocab_size)
     train_data, test_data = random_split(data, [0.7, 0.3])
 
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
