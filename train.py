@@ -13,7 +13,7 @@ from model import Transformer
 # Hyperparameters
 batch_size = 64
 num_batches = 50000
-vocab_size = 8000
+vocab_size = 8003
 
 model_name = "50k_smaller_model"
 checkpoint_save_dir = f"./checkpoints/{model_name}/"
@@ -21,6 +21,7 @@ tokenizer_save_dir = f"./tokenizer.json"
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Running on: {device}")
     # TODO: Figure out how to do this, but download to data folder instead
     # path = kagglehub.dataset_download("lonnieqin/englishspanish-translation-dataset")
     # print("Path to dataset files:", path)
@@ -32,15 +33,15 @@ def main():
         "pad": "<PAD>"
     }
 
-    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=8000)
     if os.path.exists(tokenizer_save_dir):
         try:
-            tokenizer.load(tokenizer_save_dir)
-        except:
-            raise Exception(f"Could not load tokenizer at path {tokenizer_save_dir}")
+            tokenizer = Tokenizer.load(tokenizer_save_dir)
+        except Exception as e:
+            raise Exception(f"Could not load tokenizer at path {tokenizer_save_dir}: {e}")
     else:
+        tokenizer = Tokenizer(data.df, special_tokens=special)
         print("Training tokenizer...")
-        tokenizer.train()
+        tokenizer.train(vocab_size=vocab_size)
         tokenizer.save(tokenizer_save_dir)
         print("Tokenizer training complete.")
 
@@ -51,7 +52,7 @@ def main():
 
     model = Transformer(tokenizer, device, scheduler_num_batches=num_batches)
     model.to(device)
-
+    assert tokenizer.vocab_size == vocab_size, f"Size mismatch: tokenizer: {tokenizer.vocab_size}, model: {vocab_size}"
     # Sum all parameters
     print(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
 
