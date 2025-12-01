@@ -13,7 +13,7 @@ from model import Transformer
 # Hyperparameters
 batch_size = 64
 num_batches = 50000
-vocab_size = 8000
+vocab_size = 256
 
 model_name = "50k_smaller_model"
 checkpoint_save_dir = f"./checkpoints/{model_name}/"
@@ -32,8 +32,8 @@ def main():
         "pad": "<PAD>"
     }
 
-    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=8000)
-    if os.path.exists(tokenizer_save_dir):
+    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=256)
+    '''if os.path.exists(tokenizer_save_dir):
         try:
             tokenizer.load(tokenizer_save_dir)
         except:
@@ -43,9 +43,9 @@ def main():
         tokenizer.train()
         tokenizer.save(tokenizer_save_dir)
         print("Tokenizer training complete.")
-
+'''
     train_data, test_data = random_split(data, [0.7, 0.3])
-    
+
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
 
