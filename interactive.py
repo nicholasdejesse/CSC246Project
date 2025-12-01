@@ -17,9 +17,9 @@ def main():
         "pad": "<PAD>"
     }
 
-    tokenizer = Tokenizer(data.df, special_tokens=special)
+    tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=8003)
     try:
-        tokenizer.load(tokenizer_path)
+        tokenizer.load(tokenizer_path,vocab_size=8003)
     except:
         raise Exception(f"Could not load tokenizer at path {tokenizer_path}. Are you sure you trained it?")
 
