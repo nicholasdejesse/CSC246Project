@@ -23,7 +23,7 @@ max_encoder_len = 512
 max_decoder_len = 512
 eval_iters = 1 # Can be low because each iteration evaluates an entire batch
 dropout = 0.3
-pos_embd_mode = "sin" # Set to "sin" or "index"
+pos_embd_mode = "index" # Set to "sin" or "index"
 
 save_freq = 1000
 log_freq = 1000
@@ -147,14 +147,14 @@ class Transformer(nn.Module):
         self.tokenizer = tokenizer
         self.device = device
 
-        self.tok_embd_enc = nn.Embedding(num_embeddings=tokenizer.vocab_size, embedding_dim=d_model)
-        self.tok_embd_dec = nn.Embedding(num_embeddings=tokenizer.vocab_size, embedding_dim=d_model)
+        self.tok_embd_enc = nn.Embedding(num_embeddings=259, embedding_dim=d_model)
+        self.tok_embd_dec = nn.Embedding(num_embeddings=259, embedding_dim=d_model)
 
         # Pass each encoder block as an arg
         self.encoder_blocks = nn.ModuleList([EncoderBlock(device) for _ in range(num_encoder_blocks)])
         # Kept as list because sequential can't take in multiple inputs (and we need to pass in encoder logits)
         self.decoder_blocks = nn.ModuleList([DecoderBlock(device) for _ in range(num_decoder_blocks)])
-        self.lin = nn.Linear(d_model, self.tokenizer.vocab_size)
+        self.lin = nn.Linear(d_model, 259)
         self.dropout = nn.Dropout(dropout)
 
         self.optim = optim.AdamW(self.parameters(), lr=lr_max)
