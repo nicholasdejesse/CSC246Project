@@ -1,3 +1,6 @@
+# Nicholas DeJesse (ndejesse@u.rochester.edu)
+# Diego Rodriguez (drodri41@u.rochester.edu)
+
 # Script to actually train the model
 # import kagglehub
 import os
@@ -33,7 +36,8 @@ def main():
     }
 
     tokenizer = Tokenizer(data.df, special_tokens=special, vocab_size=vocab_size)
-    '''if os.path.exists(tokenizer_save_dir):
+    # Load tokenizer if it exists, otherwise train it from scratch
+    if os.path.exists(tokenizer_save_dir):
         try:
             tokenizer.load(tokenizer_save_dir, vocab_size)
         except:
@@ -43,7 +47,7 @@ def main():
         tokenizer.train()
         tokenizer.save(tokenizer_save_dir)
         print("Tokenizer training complete.")
-'''
+
     train_data, test_data = random_split(data, [0.7, 0.3])
     
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
@@ -61,7 +65,7 @@ def main():
         test_loader=test_loader,
         num_batches=num_batches,
         checkpoint_dir=checkpoint_save_dir,
-        save_intermediate_checkpoints=False,
+        save_intermediate_checkpoints=False, # This will usually be False due to quota on gpus, but usually you want to set it to True
         calculate_bleu=True, # Only set to False when debugging (BLEU takes a while to calculate)
         print_examples=True
     )

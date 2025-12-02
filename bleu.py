@@ -1,9 +1,12 @@
+# Nicholas DeJesse (ndejesse@u.rochester.edu)
+# Diego Rodriguez (drodri41@u.rochester.edu)
+
 import math
 from collections import defaultdict
 
 def calculate_bleu(translated, target, n=4):
     """
-    Computes the BLEU score for translated tokens vs. target tokens.
+    Computes the BLEU score for translated tokens vs. target tokens. Inputs need to be lists not tensors.
 
     Args:
         translated (list): list of tokens that were translated
@@ -11,6 +14,7 @@ def calculate_bleu(translated, target, n=4):
         n (int): size of n-grams (default = 4)
     """
     # If either translated or target list length is less than n, score is meaningless so we return 0.
+    # Current implementation is inefficient, should switch to a version that doesn't use for loops at some point.
     if len(translated) < n or len(target) < n:
         return 0
     brev_pen = 1 if len(translated) > len(target) else math.exp(1-len(target)/len(translated))
@@ -39,6 +43,7 @@ def calculate_bleu(translated, target, n=4):
 
 
 def main():
+    # Small test for BLEU score
     test = ["I", "like", "computer", "science", ".", "It", "is", "my", "favorite", "subject", "."]
     target = ["I", "like", "computer", "science", ".", "It", "is", "my", "favorite", "subject", "!"]
 

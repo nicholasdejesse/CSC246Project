@@ -1,3 +1,6 @@
+# Nicholas DeJesse (ndejesse@u.rochester.edu)
+# Diego Rodriguez (drodri41@u.rochester.edu)
+
 import matplotlib.pyplot as plt
 import argparse
 import pandas as pd
