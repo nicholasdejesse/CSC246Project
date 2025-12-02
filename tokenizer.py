@@ -22,6 +22,7 @@ class Tokenizer:
         self.vocab_size = vocab_size
         self.vocab = {}
         self.vocab = {idx: bytes([idx]) for idx in range(256)}
+        #Special token setup
         for i, tok in enumerate(self.special_tokens.values()):
             self.sp_tok_to_id[tok] = vocab_size - len(self.special_tokens) + i
         self.sp_ids = set(self.sp_tok_to_id.values())
@@ -32,14 +33,17 @@ class Tokenizer:
         num_merges = self.vocab_size - 256 - len(self.special_tokens)
         ids = list(self.tokens)
 
-        #Identifying tokens for merging
+        #Identifying/merging new tokens
         for i in range(num_merges):
+            #Print progress
             if i % 100 == 0:
                 print(f"Merge {i}/{num_merges}")
+            #Calculates most frequent pair
             stats = get_stats(ids, self.sp_ids)
             if not stats:
                 break
             pair = max(stats, key=stats.get)
+            #Creates a new token ID
             idx = 256 + i
             ids = bpe_merge(ids, self.sp_ids, pair, idx)
             self.merges[pair] = idx
@@ -57,8 +61,10 @@ class Tokenizer:
     def encode(self,text):
         tokens = []
         i = 0
+        #Encode into tokens
         while i < len(text):
             matched = False
+            #Skip special tokens
             for sp_tok, sp_id in self.sp_tok_to_id.items():
                 if text.startswith(sp_tok, i):
                     tokens.append(sp_id)
@@ -69,6 +75,7 @@ class Tokenizer:
                 char_bytes = text[i].encode("utf-8")
                 tokens.extend(list(char_bytes))
                 i += 1
+        #Apply merges
         while len(tokens) >= 2:
             stats = get_stats(tokens, self.sp_ids)
             pair = min(stats, key=lambda p: self.merges.get(p, float("inf")))
@@ -118,7 +125,6 @@ def bpe_merge(ids, sp_ids, pair, idx):
     newids = []
     i = 0
     while i < len(ids):
-        #
         if ids[i] not in sp_ids and ids[i] == pair[0] and i < len(ids) - 1 and ids[i + 1] == pair[1] and ids[
             i + 1] not in sp_ids:
             newids.append(idx)
@@ -128,7 +134,7 @@ def bpe_merge(ids, sp_ids, pair, idx):
             i += 1
     return newids
 
-# Quick test to make sure everything works
+#Main function for testing
 if __name__ == "__main__":
     train = "Wowwy, CSC 246 is an amazing course!"
     special = {
@@ -141,6 +147,6 @@ if __name__ == "__main__":
     tkn = Tokenizer(train, special_tokens=special,vocab_size=276)
     #tkn.train()
 
-    test = "[BOS]Wowy, español CSC 246 is an amazing course![EOS][PAD][PAD]"
+    test = "[BOS]Wowy, español is amazing![EOS][PAD][PAD]"
     print(f"Encoded: {tkn.encode(test)}")
     print(f"Decoded: {tkn.decode(tkn.encode(test))}")
