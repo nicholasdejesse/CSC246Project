@@ -1,3 +1,6 @@
+# Nicholas DeJesse (ndejesse@u.rochester.edu)
+# Diego Rodriguez (drodri41@u.rochester.edu)
+
 # Code for the actual model
 
 import torch
@@ -13,7 +16,7 @@ import json
 
 from bleu import calculate_bleu
 
-# Hyperparameters (TODO: move these somewhere else (argparse)?)
+# Hyperparameters
 d_model = 256
 ff_hidden_size = 1024
 mha_heads = 4
@@ -23,7 +26,7 @@ max_encoder_len = 512
 max_decoder_len = 512
 eval_iters = 1 # Can be low because each iteration evaluates an entire batch
 dropout = 0.3
-pos_embd_mode = "sin"
+pos_embd_mode = "sin" # Set to either "sin" for sinusoidal encoding or "index" for naive encoding
 
 save_freq = 1000
 log_freq = 1000
@@ -81,6 +84,7 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, num_heads, is_masked, device):
         super().__init__()
         self.device = device
+        # Split evenly between heads
         head_dim = d_model // num_heads
         self.heads = nn.ModuleList([Head(is_masked=is_masked, head_dim=head_dim, device=device) for _ in range(num_heads)])
         self.lin = nn.Linear(d_model, d_model)
@@ -116,6 +120,7 @@ class EncoderBlock(nn.Module):
         self.ln2 = nn.LayerNorm(d_model)
 
     def forward(self, x, enc_pad):
+        # x = x + ... acts as a residual connection
         x = x + self.mha(x, enc=None, enc_pad=enc_pad, dec_pad=None)
         x = self.ln1(x)
         x = x + self.ff(x)
@@ -150,9 +155,8 @@ class Transformer(nn.Module):
         self.tok_embd_enc = nn.Embedding(num_embeddings=tokenizer.vocab_size, embedding_dim=d_model)
         self.tok_embd_dec = nn.Embedding(num_embeddings=tokenizer.vocab_size, embedding_dim=d_model)
 
-        # Pass each encoder block as an arg
+        # Kept as module list because sequential can't take in multiple inputs
         self.encoder_blocks = nn.ModuleList([EncoderBlock(device) for _ in range(num_encoder_blocks)])
-        # Kept as list because sequential can't take in multiple inputs (and we need to pass in encoder logits)
         self.decoder_blocks = nn.ModuleList([DecoderBlock(device) for _ in range(num_decoder_blocks)])
         self.lin = nn.Linear(d_model, self.tokenizer.vocab_size)
         self.dropout = nn.Dropout(dropout)
@@ -161,7 +165,7 @@ class Transformer(nn.Module):
 
         # This is None when we are running inference
         if scheduler_num_batches is not None:
-            # Cosine lr scheduler with warmup
+            # Cosine lr scheduler with warmup, increase linearly at start then decrease with cosine scheduler
             warmup_scheduler = scheduler.LinearLR(self.optim, start_factor=lr_min, end_factor=1, total_iters=lr_warmup_steps)
             cosine_scheduler = scheduler.CosineAnnealingLR(self.optim, T_max=scheduler_num_batches - lr_warmup_steps, eta_min=lr_min)
             self.lr_schedule = scheduler.SequentialLR(self.optim, schedulers=[warmup_scheduler, cosine_scheduler], milestones=[lr_warmup_steps])
@@ -172,7 +176,7 @@ class Transformer(nn.Module):
     def forward(self, enc_in, dec_in, enc_pad, dec_pad):
         _, enc_t = enc_in.shape
         _, dec_t = dec_in.shape
-        # (B, T, C) + (T, C)
+        # (B, T, C) + (T, C) (broadcasted to each batch)
         enc_in = self.tok_embd_enc(enc_in) + self.pos_enc(enc_t)
         dec_in = self.tok_embd_dec(dec_in) + self.pos_enc(dec_t)
 
@@ -217,7 +221,7 @@ class Transformer(nn.Module):
             B, T, C = out.shape
             out = out.view(B*T, C)
             target = target.view(-1)
-            # Ignore padding tokens in loss
+            # Ignore padding tokens in loss, use label smoothing
             loss = F.cross_entropy(out, target, ignore_index=self.tokenizer.encode(self.tokenizer.special_tokens["pad"])[0], label_smoothing=0.1)
             torch.nn.utils.clip_grad_norm_(self.parameters(), 1) # Clip gradient to 1 for stability
             self.optim.zero_grad()
@@ -237,6 +241,7 @@ class Transformer(nn.Module):
             # Number of columns is half of what we need because it will be spread out when creating final result
             ang = pos @ i # Inner product to get inputs to trig functions
             res = torch.zeros((length, d_model), device=self.device)
+            # ::2 skips every other entry
             res[:,0::2] = torch.sin(ang)
             res[:,1::2] = torch.cos(ang)
             return res
@@ -262,7 +267,7 @@ class Transformer(nn.Module):
 
     def generate(self, encoder_input):
         """
-        Only works for batch size = 1 for now.
+        Only works for batch size = 1 for now (doesn't really matter).
         """
         encoder_input = torch.tensor(self.tokenizer.encode(encoder_input), dtype=torch.long, device=self.device).unsqueeze(0)
         context = torch.tensor(self.tokenizer.encode(self.tokenizer.special_tokens["bos"]), dtype=torch.long, device=self.device).unsqueeze(0)
@@ -326,6 +331,9 @@ class Transformer(nn.Module):
         return bleus
     
     def dump_model_info(self, path, num_batches):
+        """
+        Dump all relevant variables in a json.
+        """
         config = {
             "num_batches":num_batches,
             "total_parameters":sum(p.numel() for p in self.parameters()),
@@ -361,6 +369,9 @@ def get_batch(loader, tokenizer, device):
     return enc_in, dec_in, target, enc_pad, dec_pad
 
 def process_batch(batch, tokenizer, special_tokens, device):
+    """
+    Add <BOS>, <EOS>, and <PAD> where necessary, and gets padding mask
+    """
     bos = tokenizer.encode(special_tokens["bos"])
     eos = tokenizer.encode(special_tokens["eos"])
     pad = tokenizer.encode(special_tokens["pad"])[0]

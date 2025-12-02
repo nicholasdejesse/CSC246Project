@@ -1,3 +1,6 @@
+# Nicholas DeJesse (ndejesse@u.rochester.edu)
+# Diego Rodriguez (drodri41@u.rochester.edu)
+
 import torch
 
 from model import Transformer
@@ -30,6 +33,7 @@ def main():
     model.to(device)
 
     model.eval()
+    # REPL
     while True:
         encoder_in = input("Enter English words: ")
         out = model.generate(encoder_in)

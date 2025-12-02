@@ -1,3 +1,6 @@
+# Nicholas DeJesse (ndejesse@u.rochester.edu)
+# Diego Rodriguez (drodri41@u.rochester.edu)
+
 from torch.utils.data import Dataset
 import pandas as pd
 

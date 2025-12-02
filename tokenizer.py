@@ -1,4 +1,8 @@
+# Nicholas DeJesse (ndejesse@u.rochester.edu)
+# Diego Rodriguez (drodri41@u.rochester.edu)
+
 # Code for tokenizer
+
 import json
 import numpy as np
 import pandas as pd
