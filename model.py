@@ -17,15 +17,15 @@ import json
 from bleu import calculate_bleu
 
 # Hyperparameters
-d_model = 256
-ff_hidden_size = 1024
-mha_heads = 4
-num_encoder_blocks = 3
-num_decoder_blocks = 3
+d_model = 512
+ff_hidden_size = 2048
+mha_heads = 8
+num_encoder_blocks = 6
+num_decoder_blocks = 6
 max_encoder_len = 512
 max_decoder_len = 512
 eval_iters = 1 # Can be low because each iteration evaluates an entire batch
-dropout = 0.3
+dropout = 0.1
 pos_embd_mode = "sin" # Set to either "sin" for sinusoidal encoding or "index" for naive encoding
 
 save_freq = 1000
